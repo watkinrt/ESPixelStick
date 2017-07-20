@@ -34,7 +34,6 @@ const char passphrase[] = "ENTER_PASSPHRASE_HERE";
 /*         END - Configuration           */
 /*****************************************/
 
-//#include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
 #include <AsyncMqttClient.h>
@@ -113,8 +112,8 @@ void setup() {
     wifi_set_sleep_type(NONE_SLEEP_T);
 
     // Initial pin states
-    pinMode(DATA_PIN, OUTPUT);
-    digitalWrite(DATA_PIN, LOW);
+    //pinMode(DATA_PIN, OUTPUT);
+    //digitalWrite(DATA_PIN, LOW);
 
     // Setup serial log port
     LOG_PORT.begin(115200);
@@ -183,7 +182,7 @@ void setup() {
 
     // Configure the outputs
 #if defined (ESPS_MODE_PIXEL)
-    pixels.setPin(DATA_PIN);
+    //pixels.setPin(DATA_PIN);
     updateConfig();
     pixels.show();
 #else

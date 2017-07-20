@@ -20,11 +20,12 @@
 #ifndef PIXELDRIVER_H_
 #define PIXELDRIVER_H_
 
-#define UART_INV_MASK  (0x3f << 19)
-#define UART 1
+#define UART_INV_MASK   (0x3f << 19)
+#define UART            1               // UART 1
+#define DATA_PIN        2               // Data output on GPIO2
 
-/* Gamma correction table until pow() is fixed */
-const uint8_t GAMMA_2811[] = {
+// Gamma correction table until pow() is fixed
+const uint8_t GAMMA_TABLE[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2,
     2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
@@ -43,44 +44,50 @@ const uint8_t GAMMA_2811[] = {
     222,224,227,229,231,233,235,237,239,241,244,246,248,250,252,255
 };
 
-/* 
-* Inverted 6N1 UART lookup table for ws2811, first 2 bits ignored.
-* Start and stop bits are part of the pixel stream. 
-*/
+
+// WS2811
+//
+// Inverted 6N1 UART lookup table for ws2811, first 2 bits ignored.
+// Start and stop bits are part of the pixel stream. 
+//
 const char LOOKUP_2811[4] = {
     0b00110111,     // 00 - (1)000 100(0)
     0b00000111,     // 01 - (1)000 111(0)
     0b00110100,     // 10 - (1)110 100(0)
     0b00000100      // 11 - (1)110 111(0)
 };
+#define WS2811_TFRAME   30L     // 30us frame time
+#define WS2811_TIDLE    300L    // 300us idle time
 
+// WS2801
+#define WS2801_CLOCK    1000000L    // 1 MHz clock
+#define WS2801_TFRAME   24L         // (1 / WS2801_CLOCK) * 1000000L * 24L
+#define WS2801_TIDLE    500L        // 500us idle time
+
+// GECE
 #define GECE_DEFAULT_BRIGHTNESS 0xCC
-
 #define GECE_ADDRESS_MASK       0x03F00000
 #define GECE_BRIGHTNESS_MASK    0x000FF000
 #define GECE_BLUE_MASK          0x00000F00
 #define GECE_GREEN_MASK         0x000000F0
 #define GECE_RED_MASK           0x0000000F
-
 #define GECE_GET_ADDRESS(packet)     (packet >> 20) & 0x3F
 #define GECE_GET_BRIGHTNESS(packet)  (packet >> 12) & 0xFF
 #define GECE_GET_BLUE(packet)        (packet >> 8) & 0x0F
 #define GECE_GET_GREEN(packet)       (packet >> 4) & 0x0F
 #define GECE_GET_RED(packet)         packet & 0x0F
 #define GECE_PSIZE      26
+#define GECE_TFRAME     790L    // 790us frame time
+#define GECE_TIDLE      35L     // 35us idle time
 
-#define WS2811_TFRAME   30L     /* 30us frame time */
-#define WS2811_TIDLE    300L    /* 300us idle time */
-#define GECE_TFRAME     790L    /* 790us frame time */
-#define GECE_TIDLE      35L     /* 35us idle time */
-
-/* Pixel Types */
+// Pixel Types
 enum class PixelType : uint8_t {
     WS2811,
-    GECE
+    GECE,
+    WS2801
 };
 
-/* Color Order */
+// Color Order
 enum class PixelColor : uint8_t {
     RGB,
     GRB,
@@ -96,17 +103,17 @@ class PixelDriver {
     int begin(PixelType type);
     int begin(PixelType type, PixelColor color, uint16_t length);
     void setPin(uint8_t pin);
-    void setGamma(bool gamma);
+    void setGamma(bool enabled);
     void updateOrder(PixelColor color);
     void show();
     uint8_t* getData();
 
-    /* Set channel value at address */
+    // Set channel value at address
     inline void setValue(uint16_t address, uint8_t value) {
         pixdata[address] = value;
     }
 
-    /* Drop the update if our refresh rate is too high */
+    // Drop the update if our refresh rate is too high
     inline bool canRefresh() {
         return (micros() - startTime) >= refreshTime;
     }
@@ -114,7 +121,6 @@ class PixelDriver {
  private:
     PixelType  type;            // Pixel type
     PixelColor color;           // Color Order
-    uint8_t     pin;            // Pin for bit-banging
     uint8_t     *pixdata;       // Pixel buffer
     uint8_t     *asyncdata;     // Async buffer
     uint8_t     *pbuff;         // GECE Packet Buffer
@@ -127,21 +133,22 @@ class PixelDriver {
     static uint8_t    bOffset;  // Index of blue byte
 
     void ws2811_init();
+    void ws2801_init();
     void gece_init();
 
-    /* FIFO Handlers */
+    // FIFO Handlers
     static const uint8_t* ICACHE_RAM_ATTR fillWS2811(const uint8_t *buff,
             const uint8_t *tail);
 
-    /* Interrupt Handlers */
+    // Interrupt Handlers
     static void ICACHE_RAM_ATTR handleWS2811(void *param);
 
-    /* Returns number of bytes waiting in the TX FIFO of UART1 */
+    // Returns number of bytes waiting in the TX FIFO of UART1
     static inline uint8_t getFifoLength() {
         return (U1S >> USTXC) & 0xff;
     }
 
-    /* Append a byte to the TX FIFO of UART1 */
+    // Append a byte to the TX FIFO of UART1
     static inline void enqueue(uint8_t byte) {
         U1F = byte;
     }

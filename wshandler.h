@@ -81,6 +81,7 @@ void procE(uint8_t *data, AsyncWebSocketClient *client) {
             // Pixel Types
             JsonObject &p_type = json.createNestedObject("p_type");
             p_type["WS2811 800kHz"] = static_cast<uint8_t>(PixelType::WS2811);
+            p_type["WS2801"] = static_cast<uint8_t>(PixelType::WS2801);
             p_type["GE Color Effects"] = static_cast<uint8_t>(PixelType::GECE);
 
             // Pixel Colors

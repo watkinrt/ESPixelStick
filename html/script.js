@@ -177,7 +177,7 @@ function wifiValidation() {
 	} else {
 		$('#fg_hostname').removeClass('has-success');
 		$('#fg_hostname').addClass('has-error');
-		WifiSaveDisabled = true
+		WifiSaveDisabled = true;
 	}
 	if ($('#ssid').val().length <= 32){
 		$('#fg_ssid').removeClass('has-error');
@@ -185,7 +185,7 @@ function wifiValidation() {
 	} else {
 		$('#fg_ssid').removeClass('has-success');
 		$('#fg_ssid').addClass('has-error');
-		WifiSaveDisabled = true
+		WifiSaveDisabled = true;
 	}
 	if ($('#password').val().length <= 32){
 		$('#fg_password').removeClass('has-error');
@@ -193,9 +193,9 @@ function wifiValidation() {
 	} else {
 		$('#fg_password').removeClass('has-success');
 		$('#fg_password').addClass('has-error');
-		WifiSaveDisabled = true
+		WifiSaveDisabled = true;
 	}
-	if ($('#dhcp').prop('checked')== false) {
+	if ($('#dhcp').prop('checked') == false) {
 		var iptest = new RegExp('' 
 		+ /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\./.source
 		+ /(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\./.source
@@ -209,7 +209,7 @@ function wifiValidation() {
 		} else {
 			$('#fg_ip').removeClass('has-success');
 			$('#fg_ip').addClass('has-error');
-			WifiSaveDisabled = true
+			WifiSaveDisabled = true;
 		}
 		if (iptest.test($('#netmask').val())) {
 			$('#fg_netmask').removeClass('has-error');
@@ -217,7 +217,7 @@ function wifiValidation() {
 		} else {
 			$('#fg_netmask').removeClass('has-success');
 			$('#fg_netmask').addClass('has-error');
-			WifiSaveDisabled = true
+			WifiSaveDisabled = true;
 		}
 		if (iptest.test($('#gateway').val())) {
 			$('#fg_gateway').removeClass('has-error');
@@ -225,7 +225,7 @@ function wifiValidation() {
 		} else {
 			$('#fg_gateway').removeClass('has-success');
 			$('#fg_gateway').addClass('has-error');
-			WifiSaveDisabled = true
+			WifiSaveDisabled = true;
 		}
 	}
 	$('#btn_wifi').prop('disabled', WifiSaveDisabled);
@@ -597,6 +597,9 @@ function refreshPixel() {
     if (!proto.localeCompare('WS2811 800kHz')) {
         frame = 30;
         idle = 300;
+    } else if (!proto.localeCompare('WS2801')) {
+        frame = 24; // Based off 1MHz clock
+        idle = 500;
     } else if (!proto.localeCompare('GE Color Effects')) {
         frame = 790;
         idle = 35;

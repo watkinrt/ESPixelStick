@@ -31,7 +31,6 @@ const char VERSION[] = "3.0-dev2 (20170629)";
 
 #define HTTP_PORT       80      /* Default web server port */
 #define MQTT_PORT       1883    /* Default MQTT port */
-#define DATA_PIN        2       /* Pixel output - GPIO2 */
 #define EEPROM_BASE     0       /* EEPROM configuration base address */
 #define UNIVERSE_LIMIT  512     /* Universe boundary - 512 Channels */
 #define PIXEL_LIMIT     1360    /* Total pixel limit - 40.85ms for 8 universes */

@@ -20,6 +20,7 @@
 #include <Arduino.h>
 #include <utility>
 #include <algorithm>
+#include <SPI.h>
 #include "PixelDriver.h"
 #include "bitbang.h"
 
@@ -32,7 +33,7 @@ extern "C" {
 
 static const uint8_t    *uart_buffer;       // Buffer tracker
 static const uint8_t    *uart_buffer_tail;  // Buffer tracker
-static bool             ws2811gamma;        // Gamma flag
+static bool             pixgamma;           // Gamma flag
 
 uint8_t PixelDriver::rOffset = 0;
 uint8_t PixelDriver::gOffset = 1;
@@ -87,9 +88,20 @@ int PixelDriver::begin(PixelType type, PixelColor color, uint16_t length) {
         retval = false;
     }
 
+    // Tristate data and clock pins
+    Serial1.end();
+    pinMode(SCK, INPUT);
+    pinMode(MOSI, INPUT);
+    pinMode(DATA_PIN, INPUT);
+    // For v2.0 and older hardware where GPIO0 was wired to clock
+    pinMode(0, INPUT);
+
     if (type == PixelType::WS2811) {
         refreshTime = WS2811_TFRAME * length + WS2811_TIDLE;
         ws2811_init();
+    } else if (type == PixelType::WS2801) {
+        refreshTime = WS2801_TFRAME * length + WS2801_TIDLE;
+        ws2801_init();
     } else if (type == PixelType::GECE) {
         refreshTime = (GECE_TFRAME + GECE_TIDLE) * length;
         gece_init();
@@ -100,13 +112,8 @@ int PixelDriver::begin(PixelType type, PixelColor color, uint16_t length) {
     return retval;
 }
 
-void PixelDriver::setPin(uint8_t pin) {
-    if (this->pin >= 0)
-        this->pin = pin;
-}
-
-void PixelDriver::setGamma(bool gamma) {
-    ws2811gamma = gamma;
+void PixelDriver::setGamma(bool enabled) {
+    pixgamma = enabled;
 }
 
 void PixelDriver::ws2811_init() {
@@ -138,11 +145,18 @@ void PixelDriver::ws2811_init() {
     ETS_UART_INTR_ENABLE();
 }
 
+void PixelDriver::ws2801_init() {
+    SPI.begin();
+    SPI.setBitOrder(MSBFIRST);
+    SPI.setDataMode(SPI_MODE0);
+    SPI.setFrequency(WS2801_CLOCK);
+    pinMode(MISO, INPUT);  // Tri-state MISO since we don't use it
+}
+
 void PixelDriver::gece_init() {
-    /* Setup for bit-banging */
-    Serial1.end();
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, LOW);
+    // Setup for bit-banging
+    pinMode(DATA_PIN, OUTPUT);
+    digitalWrite(DATA_PIN, LOW);
 }
 
 void PixelDriver::updateOrder(PixelColor color) {
@@ -182,7 +196,7 @@ void PixelDriver::updateOrder(PixelColor color) {
 }
 
 void ICACHE_RAM_ATTR PixelDriver::handleWS2811(void *param) {
-    /* Process if UART1 */
+    // Process if UART1
     if (READ_PERI_REG(UART_INT_ST(UART1))) {
         // Fill the FIFO with new data
         uart_buffer = fillWS2811(uart_buffer, uart_buffer_tail);
@@ -195,7 +209,7 @@ void ICACHE_RAM_ATTR PixelDriver::handleWS2811(void *param) {
         WRITE_PERI_REG(UART_INT_CLR(UART1), 0xffff);
     }
 
-    /* Clear if UART0 */
+    // Clear if UART0
     if (READ_PERI_REG(UART_INT_ST(UART0)))
         WRITE_PERI_REG(UART_INT_CLR(UART0), 0xffff);
 }
@@ -206,25 +220,25 @@ const uint8_t* ICACHE_RAM_ATTR PixelDriver::fillWS2811(const uint8_t *buff,
     if (tail - buff > avail)
         tail = buff + avail;
 
-    if (ws2811gamma) {
+        if (pixgamma) {
         while (buff + 2 < tail) {
             uint8_t subpix = buff[rOffset];
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[GAMMA_2811[subpix] & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 6) & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 4) & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 2) & 0x3]);
+            enqueue(LOOKUP_2811[GAMMA_TABLE[subpix] & 0x3]);
 
             subpix = buff[gOffset];
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[GAMMA_2811[subpix] & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 6) & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 4) & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 2) & 0x3]);
+            enqueue(LOOKUP_2811[GAMMA_TABLE[subpix] & 0x3]);
 
             subpix = buff[bOffset];
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 6) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 4) & 0x3]);
-            enqueue(LOOKUP_2811[(GAMMA_2811[subpix] >> 2) & 0x3]);
-            enqueue(LOOKUP_2811[GAMMA_2811[subpix] & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 6) & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 4) & 0x3]);
+            enqueue(LOOKUP_2811[(GAMMA_TABLE[subpix] >> 2) & 0x3]);
+            enqueue(LOOKUP_2811[GAMMA_TABLE[subpix] & 0x3]);
 
             buff += 3;
         }
@@ -267,6 +281,12 @@ void PixelDriver::show() {
         // Copy the pixels to the idle buffer and swap them
         memcpy(asyncdata, pixdata, szBuffer);
         std::swap(asyncdata, pixdata);
+    } else if (type == PixelType::WS2801) {
+        startTime = micros();
+        pinMode(SCK, SPECIAL);
+        SPI.writeBytes(pixdata, numPixels * 3);
+        pinMode(SCK, OUTPUT);
+        digitalWrite(SCK, LOW);
     } else if (type == PixelType::GECE) {
          uint32_t packet = 0;
 
@@ -281,7 +301,7 @@ void PixelDriver::show() {
             packet = (packet & ~GECE_RED_MASK) | (pixdata[i*3] >> 4);
 
             /* and send it */
-            doGECE(pin, packet);
+            doGECE(DATA_PIN, packet);
         }
     }
 }
