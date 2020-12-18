@@ -1,7 +1,8 @@
 # This is the name of the workflow, visible on GitHub UI.
 name: ESPixelStick CI
 
-lib: Arduino/libraries
+env:
+  arduinolib: Arduino/libraries
 
 # Here we tell GitHub to run the workflow when a commit
 # is pushed or a Pull Request is opened.
@@ -59,58 +60,56 @@ jobs:
       # Checkout ESPixelStick
       - name: Checkout ESPixelStick
         uses: actions/checkout@v2
-        with:
-          ref: unify
 
       # And all the required libraries
       - name: Checkout marvinroger/async-mqtt-client
         uses: actions/checkout@v2
         with:
           repository: marvinroger/async-mqtt-client
-          path: ${{lib}}/async-mqtt-client
+          path: $arduinolib/async-mqtt-client
 
       - name: Checkout bblanchon/ArduinoJson
         uses: actions/checkout@v2
         with:
           repository: bblanchon/ArduinoJson
-          path: ${{lib}}/ArduinoJson
+          path: $arduinolib/ArduinoJson
           ref: 6.x
 
       - name: Checkout Aircoookie/Espalexa
         uses: actions/checkout@v2
         with:
           repository: Aircoookie/Espalexa
-          path: ${{lib}}/Espalexa
+          path: $arduinolib/Espalexa
 
       - name: Checkout forkineye/ESPAsyncE131
         uses: actions/checkout@v2
         with:
           repository: forkineye/ESPAsyncE131
-          path: ${{lib}}/ESPAsyncE131
+          path: $arduinolib/ESPAsyncE131
 
       - name: Checkout me-no-dev/ESPAsyncTCP
         uses: actions/checkout@v2
         with:
           repository: me-no-dev/ESPAsyncTCP
-          path: ${{lib}}/ESPAsyncTCP
+          path: $arduinolib/ESPAsyncTCP
 
       - name: Checkout me-no-dev/ESPAsyncUDP
         uses: actions/checkout@v2
         with:
           repository: me-no-dev/ESPAsyncUDP
-          path: ${{lib}}/ESPAsyncUDP
+          path: $arduinolib/ESPAsyncUDP
 
       - name: Checkout me-no-dev/ESPAsyncWebServer
         uses: actions/checkout@v2
         with:
           repository: me-no-dev/ESPAsyncWebServer
-          path: ${{lib}}/ESPAsyncWebServer
+          path: $arduinolib/ESPAsyncWebServer
 
       - name: Checkout djGrrr/Int64String
         uses: actions/checkout@v2
         with:
           repository: djGrrr/Int64String
-          path: ${{lib}}/Int64String
+          path: $arduinolib/Int64String
 
       - name: Create secrets.h
         run: |
