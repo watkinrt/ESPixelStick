@@ -55,7 +55,7 @@ jobs:
       - name: Update board indexes
         run: |
           arduino-cli config init
-          arduino-cli config add board.manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
       - name: Install platform
         run: arduino-cli core install ${{ matrix.arduino-platform }}
