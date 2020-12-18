@@ -24,7 +24,7 @@ jobs:
         # parameter of type `arduino-platform`, in this case a
         # total of 2.
         #arduino-platform: ["arduino:samd", "arduino:avr"]
-        arduino-platform: ["esp8266com:esp8266@2.7.4"]
+        arduino-platform: ["esp8266com:esp8266"]
         # This is usually optional but we need to statically define the
         # FQBN of the boards we want to test for each platform. In the
         # future the CLI might automatically detect and download the core
@@ -37,7 +37,7 @@ jobs:
           #  fqbn: "arduino:samd:nano_33_iot"
           #- arduino-platform: "arduino:avr"
           #  fqbn: "arduino:avr:unowifi"
-          - arduino-platform: "esp8266com:esp8266@2.7.4"
+          - arduino-platform: "esp8266com:esp8266"
             fqbn: "esp8266com:esp8266:generic:xtal=160,vt=flash,exception=legacy,ResetMethod=nodemcu,CrystalFreq=26,FlashFreq=40,FlashMode=dio,eesz=4M2M,led=2,ip=hb2f,dbg=Disabled"
 
     # Build on ubuntu
