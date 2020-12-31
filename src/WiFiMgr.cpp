@@ -42,6 +42,46 @@
 const char ssid[]       = SECRETS_SSID;
 const char passphrase[] = SECRETS_PASS;
 
+// Ethernet connection status as ETH doesn't currently have a status function
+static bool eth_connected = false;
+
+void EthTrackingEvent(WiFiEvent_t event)
+{
+  switch (event) {
+    case SYSTEM_EVENT_ETH_START:
+      Serial.println("ETH Started");
+      //set eth hostname here
+    //   ETH.setHostname("esp32-ethernet");
+      break;
+    case SYSTEM_EVENT_ETH_CONNECTED:
+      Serial.println("ETH Connected");
+      break;
+    case SYSTEM_EVENT_ETH_GOT_IP:
+      Serial.print("ETH MAC: ");
+      Serial.print(ETH.macAddress());
+      Serial.print(", IPv4: ");
+      Serial.print(ETH.localIP());
+      if (ETH.fullDuplex()) {
+        Serial.print(", FULL_DUPLEX");
+      }
+      Serial.print(", ");
+      Serial.print(ETH.linkSpeed());
+      Serial.println("Mbps");
+      eth_connected = true;
+      break;
+    case SYSTEM_EVENT_ETH_DISCONNECTED:
+      Serial.println("ETH Disconnected");
+      eth_connected = false;
+      break;
+    case SYSTEM_EVENT_ETH_STOP:
+      Serial.println("ETH Stopped");
+      eth_connected = false;
+      break;
+    default:
+      break;
+  }
+}
+
 /// Radio configuration
 /** ESP8266 radio configuration routines that are executed at startup. */
 /* Disabled for now, possible flash wear issue. Need to research further
@@ -60,6 +100,8 @@ RF_PRE_INIT() {
 /* FSM                                                                       */
 /*****************************************************************************/
 fsm_WiFi_state_Boot                    fsm_WiFi_state_Boot_imp;
+fsm_WiFi_state_ConnectingToEthUsingConfig   fsm_WiFi_state_ConnectingToEthUsingConfig_imp;
+fsm_WiFi_state_ConnectingToEthUsingDefaults fsm_WiFi_state_ConnectingToEthDefault_imp;
 fsm_WiFi_state_ConnectingUsingConfig   fsm_WiFi_state_ConnectingUsingConfig_imp;
 fsm_WiFi_state_ConnectingUsingDefaults fsm_WiFi_state_ConnectingDefault_imp;
 fsm_WiFi_state_ConnectedToEth          fsm_WiFi_state_ConnectedToEth_imp;
@@ -111,6 +153,7 @@ void c_WiFiMgr::Begin (config_t* NewConfig)
     wifiConnectHandler    = WiFi.onStationModeGotIP        ([this](const WiFiEventStationModeGotIP& event) {this->onWiFiConnect (event); });
     wifiDisconnectHandler = WiFi.onStationModeDisconnected ([this](const WiFiEventStationModeDisconnected& event) {this->onWiFiDisconnect (event); });
 #else
+    WiFi.onEvent(EthTrackingEvent);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_CONNECTED);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiDisconnect (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_DISCONNECTED);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_STA_GOT_IP);
@@ -235,7 +278,7 @@ void c_WiFiMgr::reset ()
 } // reset
 
 //-----------------------------------------------------------------------------
-void c_WiFiMgr::SetUpIp ()
+void c_WiFiMgr::SetUpEthIp ()
 {
     // DEBUG_START;
 
@@ -259,12 +302,48 @@ void c_WiFiMgr::SetUpIp ()
             break;
         }
 
-        // //@TODO IFDEF
         if ((config->ip      == ETH.localIP ())    &&
             (config->netmask == ETH.subnetMask ()) &&
             (config->gateway == ETH.gatewayIP ()))
         {
             // correct IP is already set
+            break;
+        }
+
+
+        // We didn't use DNS, so just set it to our configured gateway
+        ETH.config (config->ip, config->gateway, config->netmask, config->gateway);
+
+        LOG_PORT.println (F ("Connected to Ethernet with Static IP"));
+
+    } while (false);
+
+    // DEBUG_END;
+
+} // SetUpIp
+
+//-----------------------------------------------------------------------------
+void c_WiFiMgr::SetUpIp ()
+{
+    // DEBUG_START;
+
+    do // once
+    {
+        if (true == config->UseDhcp)
+        {
+            LOG_PORT.println (F ("Connected with DHCP"));
+            break;
+        }
+
+        IPAddress temp = (uint32_t)0;
+        // DEBUG_V ("   temp: " + temp.toString ());
+        // DEBUG_V ("     ip: " + config->ip.toString());
+        // DEBUG_V ("netmask: " + config->netmask.toString ());
+        // DEBUG_V ("gateway: " + config->gateway.toString ());
+
+        if (temp == config->ip)
+        {
+            LOG_PORT.println (F ("NETWORK: ERROR: STATIC SELECTED WITHOUT IP. Using DHCP assigned address"));
             break;
         }
 
@@ -402,7 +481,8 @@ void fsm_WiFi_state_Boot::Poll ()
     // DEBUG_START;
 
     // Start trying to connect to based on input config
-    fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
+    fsm_WiFi_state_ConnectingToEthUsingConfig_imp.Init ();
+    // fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
 
     // DEBUG_END;
 } // fsm_WiFi_state_boot
@@ -425,20 +505,121 @@ void fsm_WiFi_state_Boot::Init ()
 /*****************************************************************************/
 /*****************************************************************************/
 // Wait for events
+void fsm_WiFi_state_ConnectingToEthUsingConfig::Poll ()
+{
+    // DEBUG_START;
+    DEBUG_V ("Eth config poll");
+    // wait for the connection to complete via the callback function
+    uint32_t CurrentTimeMS = millis ();
+
+    // Check ethernet status first
+    if (!eth_connected)
+    {
+        LOG_PORT.println (F ("\nEthernet Failed to connect using Configured Credentials"));
+        fsm_WiFi_state_ConnectingToEthDefault_imp.Init ();
+    }
+
+    // DEBUG_END;
+} // fsm_WiFi_state_ConnectingToEthUsingConfig::Poll
+
+/*****************************************************************************/
+// Wait for events
+void fsm_WiFi_state_ConnectingToEthUsingConfig::Init ()
+{
+    // DEBUG_START;
+    DEBUG_V ("Eth config init");
+    WiFiMgr.SetFsmState (this);
+    WiFiMgr.AnnounceState ();
+    WiFiMgr.SetFsmStartTime (millis ());
+
+    // First try to connect to ethernet followed by WiFi
+    WiFiMgr.connectEth ();
+
+    //@TODO This is currently a hack. I think we need to initialize the WiFi to
+    //other things down the line to work properly, but I don't fully understand
+    //this yet.
+    WiFiMgr.connectWifi ();
+
+    // DEBUG_END;
+
+} // fsm_WiFi_state_ConnectingToEthUsingConfig::Init
+
+/*****************************************************************************/
+// Wait for events
+void fsm_WiFi_state_ConnectingToEthUsingConfig::OnConnect ()
+{
+    // DEBUG_START;
+
+    if (eth_connected) {
+        fsm_WiFi_state_ConnectedToEth_imp.Init ();
+    }
+
+    // DEBUG_END;
+
+} // fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect
+
+/*****************************************************************************/
+/*****************************************************************************/
+// Wait for events
+void fsm_WiFi_state_ConnectingToEthUsingDefaults::Poll ()
+{
+    // DEBUG_START;
+    DEBUG_V ("Eth default poll");
+    // wait for the connection to complete via the callback function
+    uint32_t CurrentTimeMS = millis ();
+
+    // Check ethernet status first
+    if (! eth_connected) {
+        LOG_PORT.println (F ("\nEthernet Failed to connect using default Credentials"));
+        fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
+    }
+
+    // DEBUG_END;
+} // fsm_WiFi_state_ConnectingToEthUsingDefaults::Poll
+
+/*****************************************************************************/
+// Wait for events
+void fsm_WiFi_state_ConnectingToEthUsingDefaults::Init ()
+{
+    // DEBUG_START;
+
+    WiFiMgr.SetFsmState (this);
+    WiFiMgr.AnnounceState ();
+    WiFiMgr.SetFsmStartTime (millis ());
+
+    // Switch to station mode and disconnect just in case
+    // DEBUG_V ("");
+
+    // First try to connect to ethernet followed by WiFi
+    WiFiMgr.connectEth ();
+
+    // DEBUG_END;
+} // fsm_WiFi_state_ConnectingToEthUsingDefaults::Init
+
+/*****************************************************************************/
+// Wait for events
+void fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect ()
+{
+    // DEBUG_START;
+
+    if (eth_connected) {
+        fsm_WiFi_state_ConnectedToEth_imp.Init ();
+    }
+
+    // DEBUG_END;
+
+} // fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect
+
+
+/*****************************************************************************/
+/*****************************************************************************/
+// Wait for events
 void fsm_WiFi_state_ConnectingUsingConfig::Poll ()
 {
     // DEBUG_START;
 
     // wait for the connection to complete via the callback function
     uint32_t CurrentTimeMS = millis ();
-
-    // Check ethernet status first
-    if (ETH.linkUp())
-    {
-        return;
-    } else {
-        LOG_PORT.println (F ("\nEthernet Failed to connect using Configured Credentials"));
-    }
 
     // If ethernet isn't connected, check WiFi
     if (WiFi.status () != WL_CONNECTED)
@@ -464,9 +645,7 @@ void fsm_WiFi_state_ConnectingUsingConfig::Init ()
     WiFiMgr.SetFsmStartTime (millis ());
 
     // First try to connect to ethernet followed by WiFi
-    if (!WiFiMgr.connectEth ()){
-        WiFiMgr.connectWifi ();
-    }
+    WiFiMgr.connectWifi ();
 
     // DEBUG_END;
 
@@ -478,11 +657,7 @@ void fsm_WiFi_state_ConnectingUsingConfig::OnConnect ()
 {
     // DEBUG_START;
 
-    if (ETH.linkUp()) {
-        fsm_WiFi_state_ConnectedToEth_imp.Init ();
-    } else {
-        fsm_WiFi_state_ConnectedToAP_imp.Init ();
-    }
+    fsm_WiFi_state_ConnectedToAP_imp.Init ();
 
     // DEBUG_END;
 
@@ -497,9 +672,6 @@ void fsm_WiFi_state_ConnectingUsingDefaults::Poll ()
 
     // wait for the connection to complete via the callback function
     uint32_t CurrentTimeMS = millis ();
-
-    // Check ethernet status first
-    if (ETH.linkUp()) return;
 
     if (WiFi.status () != WL_CONNECTED)
     {
@@ -527,9 +699,7 @@ void fsm_WiFi_state_ConnectingUsingDefaults::Init ()
     // DEBUG_V ("");
 
     // First try to connect to ethernet followed by WiFi
-    if (!WiFiMgr.connectEth ()){
-        WiFiMgr.connectWifi ();
-    }
+    WiFiMgr.connectWifi ();
 
     // DEBUG_END;
 } // fsm_WiFi_state_ConnectingUsingDefaults::Init
@@ -540,11 +710,7 @@ void fsm_WiFi_state_ConnectingUsingDefaults::OnConnect ()
 {
     // DEBUG_START;
 
-    if (ETH.linkUp()) {
-        fsm_WiFi_state_ConnectedToEth_imp.Init ();
-    } else {
-        fsm_WiFi_state_ConnectedToAP_imp.Init ();
-    }
+    fsm_WiFi_state_ConnectedToAP_imp.Init ();
 
     // DEBUG_END;
 
@@ -644,7 +810,7 @@ void fsm_WiFi_state_ConnectedToEth::Init ()
     WiFiMgr.SetFsmState (this);
     WiFiMgr.AnnounceState ();
 
-    WiFiMgr.SetUpIp ();
+    WiFiMgr.SetUpEthIp ();
 
     WiFiMgr.setIpAddress( ETH.localIP () );
     WiFiMgr.setIpSubNetMask( ETH.subnetMask () );
