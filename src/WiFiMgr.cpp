@@ -62,6 +62,7 @@ RF_PRE_INIT() {
 fsm_WiFi_state_Boot                    fsm_WiFi_state_Boot_imp;
 fsm_WiFi_state_ConnectingUsingConfig   fsm_WiFi_state_ConnectingUsingConfig_imp;
 fsm_WiFi_state_ConnectingUsingDefaults fsm_WiFi_state_ConnectingDefault_imp;
+fsm_WiFi_state_ConnectedToEth          fsm_WiFi_state_ConnectedToEth_imp;
 fsm_WiFi_state_ConnectedToAP           fsm_WiFi_state_ConnectedToAP_imp;
 fsm_WiFi_state_ConnectingAsAP          fsm_WiFi_state_ConnectingAsAP_imp;
 fsm_WiFi_state_ConnectedToSta          fsm_WiFi_state_ConnectedToSta_imp;
@@ -110,6 +111,8 @@ void c_WiFiMgr::Begin (config_t* NewConfig)
     wifiConnectHandler    = WiFi.onStationModeGotIP        ([this](const WiFiEventStationModeGotIP& event) {this->onWiFiConnect (event); });
     wifiDisconnectHandler = WiFi.onStationModeDisconnected ([this](const WiFiEventStationModeDisconnected& event) {this->onWiFiDisconnect (event); });
 #else
+    WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_CONNECTED);
+    WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiDisconnect (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_DISCONNECTED);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_STA_GOT_IP);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiDisconnect (event, info);}, WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
 #endif
@@ -144,7 +147,37 @@ void c_WiFiMgr::GetStatus (JsonObject & jsonStatus)
 } // GetStatus
 
 //-----------------------------------------------------------------------------
-void c_WiFiMgr::connectWifi ()
+bool c_WiFiMgr::connectEth ()
+{
+    // DEBUG_START;
+
+    // disconnect just in case
+// #ifdef ARDUINO_ARCH_ESP8266
+//     return
+// #endif
+    // DEBUG_V ("");
+
+    bool status = ETH.begin ();
+
+    // DEBUG_V (String ("config->hostname: ") + config->hostname);
+    if (0 != config->hostname.length ())
+    {
+        // DEBUG_V (String ("Setting WiFi hostname: ") + config->hostname);
+
+        // ETH.config (INADDR_NONE, INADDR_NONE, INADDR_NONE);
+        ETH.setHostname (config->hostname.c_str ());
+    }
+
+    LOG_PORT.println (String(F ("\nEthernet Connecting as ")) +
+                      config->hostname);
+
+    return status;
+
+    // DEBUG_END;
+} // connectEth
+
+//-----------------------------------------------------------------------------
+bool c_WiFiMgr::connectWifi ()
 {
     // DEBUG_START;
 
@@ -180,7 +213,7 @@ void c_WiFiMgr::connectWifi ()
                       String (F (" as ")) +
                       config->hostname);
 
-    WiFi.begin (config->ssid.c_str (), config->passphrase.c_str ());
+    return WiFi.begin (config->ssid.c_str (), config->passphrase.c_str ());
 
     // DEBUG_END;
 } // connectWifi
@@ -210,7 +243,7 @@ void c_WiFiMgr::SetUpIp ()
     {
         if (true == config->UseDhcp)
         {
-            LOG_PORT.println (F ("WiFi Connected with DHCP"));
+            LOG_PORT.println (F ("Connected with DHCP"));
             break;
         }
 
@@ -222,7 +255,16 @@ void c_WiFiMgr::SetUpIp ()
 
         if (temp == config->ip)
         {
-            LOG_PORT.println (F ("WiFI: ERROR: STATIC SELECTED WITHOUT IP. Using DHCP assigned address"));
+            LOG_PORT.println (F ("NETWORK: ERROR: STATIC SELECTED WITHOUT IP. Using DHCP assigned address"));
+            break;
+        }
+
+        // //@TODO IFDEF
+        if ((config->ip      == ETH.localIP ())    &&
+            (config->netmask == ETH.subnetMask ()) &&
+            (config->gateway == ETH.gatewayIP ()))
+        {
+            // correct IP is already set
             break;
         }
 
@@ -233,6 +275,8 @@ void c_WiFiMgr::SetUpIp ()
             // correct IP is already set
             break;
         }
+
+
         // We didn't use DNS, so just set it to our configured gateway
         WiFi.config (config->ip, config->gateway, config->netmask, config->gateway);
 
@@ -258,6 +302,7 @@ void c_WiFiMgr::onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t in
 
     // DEBUG_END;
 } // onWiFiConnect
+
 
 //-----------------------------------------------------------------------------
 /// WiFi Disconnect Handler
@@ -325,7 +370,7 @@ void c_WiFiMgr::AnnounceState ()
 
     String StateName;
     pCurrentFsmState->GetStateName (StateName);
-    LOG_PORT.println (String (F ("\nWiFi Entering State: ")) + StateName);
+    LOG_PORT.println (String (F ("\nNetwork Entering State: ")) + StateName);
 
     // DEBUG_END;
 
@@ -356,7 +401,7 @@ void fsm_WiFi_state_Boot::Poll ()
 {
     // DEBUG_START;
 
-    // Start trying to connect to the AP
+    // Start trying to connect to based on input config
     fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
 
     // DEBUG_END;
@@ -387,6 +432,15 @@ void fsm_WiFi_state_ConnectingUsingConfig::Poll ()
     // wait for the connection to complete via the callback function
     uint32_t CurrentTimeMS = millis ();
 
+    // Check ethernet status first
+    if (ETH.linkUp())
+    {
+        return;
+    } else {
+        LOG_PORT.println (F ("\nEthernet Failed to connect using Configured Credentials"));
+    }
+
+    // If ethernet isn't connected, check WiFi
     if (WiFi.status () != WL_CONNECTED)
     {
         if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (1000 * WiFiMgr.GetConfigPtr()->sta_timeout))
@@ -409,7 +463,10 @@ void fsm_WiFi_state_ConnectingUsingConfig::Init ()
     WiFiMgr.AnnounceState ();
     WiFiMgr.SetFsmStartTime (millis ());
 
-    WiFiMgr.connectWifi ();
+    // First try to connect to ethernet followed by WiFi
+    if (!WiFiMgr.connectEth ()){
+        WiFiMgr.connectWifi ();
+    }
 
     // DEBUG_END;
 
@@ -421,7 +478,11 @@ void fsm_WiFi_state_ConnectingUsingConfig::OnConnect ()
 {
     // DEBUG_START;
 
-    fsm_WiFi_state_ConnectedToAP_imp.Init ();
+    if (ETH.linkUp()) {
+        fsm_WiFi_state_ConnectedToEth_imp.Init ();
+    } else {
+        fsm_WiFi_state_ConnectedToAP_imp.Init ();
+    }
 
     // DEBUG_END;
 
@@ -436,6 +497,9 @@ void fsm_WiFi_state_ConnectingUsingDefaults::Poll ()
 
     // wait for the connection to complete via the callback function
     uint32_t CurrentTimeMS = millis ();
+
+    // Check ethernet status first
+    if (ETH.linkUp()) return;
 
     if (WiFi.status () != WL_CONNECTED)
     {
@@ -462,7 +526,10 @@ void fsm_WiFi_state_ConnectingUsingDefaults::Init ()
     // Switch to station mode and disconnect just in case
     // DEBUG_V ("");
 
-    WiFiMgr.connectWifi ();
+    // First try to connect to ethernet followed by WiFi
+    if (!WiFiMgr.connectEth ()){
+        WiFiMgr.connectWifi ();
+    }
 
     // DEBUG_END;
 } // fsm_WiFi_state_ConnectingUsingDefaults::Init
@@ -473,7 +540,11 @@ void fsm_WiFi_state_ConnectingUsingDefaults::OnConnect ()
 {
     // DEBUG_START;
 
-    fsm_WiFi_state_ConnectedToAP_imp.Init ();
+    if (ETH.linkUp()) {
+        fsm_WiFi_state_ConnectedToEth_imp.Init ();
+    } else {
+        fsm_WiFi_state_ConnectedToAP_imp.Init ();
+    }
 
     // DEBUG_END;
 
@@ -545,7 +616,59 @@ void fsm_WiFi_state_ConnectingAsAP::OnConnect ()
 
  // DEBUG_END;
 
-} // fsm_WiFi_state_ConnectingAsAP::OnConnect
+} // fsm_WiFi_state_ConnectedToEth::OnConnect
+
+/*****************************************************************************/
+/*****************************************************************************/
+// Wait for events
+void fsm_WiFi_state_ConnectedToEth::Poll ()
+{
+    // DEBUG_START;
+
+    // did we get silently disconnected?
+    if (!ETH.linkUp())
+    {
+     // DEBUG_V ("WiFi Handle Silent Disconnect");
+        fsm_WiFi_state_ConnectedToEth_imp.OnDisconnect ();
+    }
+
+    // DEBUG_END;
+} // fsm_WiFi_state_ConnectedToEth::Poll
+
+/*****************************************************************************/
+// Wait for events
+void fsm_WiFi_state_ConnectedToEth::Init ()
+{
+    // DEBUG_START;
+
+    WiFiMgr.SetFsmState (this);
+    WiFiMgr.AnnounceState ();
+
+    WiFiMgr.SetUpIp ();
+
+    WiFiMgr.setIpAddress( ETH.localIP () );
+    WiFiMgr.setIpSubNetMask( ETH.subnetMask () );
+
+    LOG_PORT.println (String (F ("Ethernet Connected with IP: ")) + WiFiMgr.getIpAddress ().toString ());
+
+    WiFiMgr.SetIsEthConnected (true);
+    InputMgr.WiFiStateChanged (true);
+
+    // DEBUG_END;
+} // fsm_WiFi_state_ConnectedToEth::Init
+
+/*****************************************************************************/
+// Wait for events
+void fsm_WiFi_state_ConnectedToEth::OnDisconnect ()
+{
+    // DEBUG_START;
+
+    LOG_PORT.println (F ("Ethernet lost the connection"));
+    fsm_WiFi_state_ConnectionFailed_imp.Init ();
+
+    // DEBUG_END;
+
+} // fsm_WiFi_state_ConnectedToEth::OnDisconnect
 
 /*****************************************************************************/
 /*****************************************************************************/

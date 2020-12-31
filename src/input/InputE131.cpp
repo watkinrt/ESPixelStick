@@ -72,7 +72,7 @@ void c_InputE131::Begin ()
         validateConfiguration ();
         // DEBUG_V ("");
 
-        WiFiStateChanged (WiFiMgr.IsWiFiConnected (), false);
+        WiFiStateChanged (WiFiMgr.IsEthConnected () | WiFiMgr.IsWiFiConnected (), false);
 
         // DEBUG_V ("");
         HasBeenInitialized = true;

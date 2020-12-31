@@ -24,6 +24,7 @@
 #   include <ESP8266WiFi.h>
 #else
 #   include <WiFi.h>
+#   include <ETH.h>
 #endif // def ARDUINO_ARCH_ESP8266
 
 // forward declaration
@@ -51,7 +52,8 @@ public:
     IPAddress getIpSubNetMask () { return CurrentSubnetMask; }
     void      setIpSubNetMask (IPAddress NewAddress) { CurrentSubnetMask = NewAddress; }
     void      GetStatus       (JsonObject & jsonStatus);
-    void      connectWifi     ();
+    bool      connectEth      ();
+    bool      connectWifi     ();
     void      reset           ();
     void      Poll ();
 
@@ -60,6 +62,8 @@ public:
     void      SetFsmStartTime (uint32_t NewStartTime)    { FsmTimerWiFiStartTime = NewStartTime; }
     uint32_t  GetFsmStartTime (void)                     { return FsmTimerWiFiStartTime; }
     config_t* GetConfigPtr    () { return config; }
+    bool      IsEthConnected () { return ReportedIsEthConnected; }
+    void      SetIsEthConnected (bool value) { ReportedIsEthConnected = value; }
     bool      IsWiFiConnected () { return ReportedIsWiFiConnected; }
     void      SetIsWiFiConnected (bool value) { ReportedIsWiFiConnected = value; }
 
@@ -76,6 +80,7 @@ private:
     IPAddress           CurrentSubnetMask = IPAddress (0, 0, 0, 0);
     time_t              NextPollTime = 0;
     bool                ReportedIsWiFiConnected = false;
+    bool                ReportedIsEthConnected = false;
 
     void SetUpIp ();
 
@@ -83,6 +88,8 @@ private:
     void onWiFiConnect (const WiFiEventStationModeGotIP& event);
     void onWiFiDisconnect (const WiFiEventStationModeDisconnected& event);
 #else
+    // void onEthConnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
+    // void onEthDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
     void onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
     void onWiFiDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
 #endif
@@ -91,6 +98,7 @@ protected:
     friend class fsm_WiFi_state_Boot;
     friend class fsm_WiFi_state_ConnectingUsingConfig;
     friend class fsm_WiFi_state_ConnectingUsingDefaults;
+    friend class fsm_WiFi_state_ConnectedToEth;
     friend class fsm_WiFi_state_ConnectedToAP;
     friend class fsm_WiFi_state_ConnectingAsAP;
     friend class fsm_WiFi_state_ConnectedToSta;
@@ -143,6 +151,18 @@ public:
     virtual void OnDisconnect (void)          { LOG_PORT.print ("."); }
 
 }; // fsm_WiFi_state_ConnectingUsingConfig
+
+/*****************************************************************************/
+class fsm_WiFi_state_ConnectedToEth : public fsm_WiFi_state
+{
+public:
+    virtual void Poll (void);
+    virtual void Init (void);
+    virtual void GetStateName (String& sName) { sName = F ("Connected To Ethernet"); }
+    virtual void OnConnect (void) {}
+    virtual void OnDisconnect (void);
+
+}; // fsm_WiFi_state_Cofsm_WiFi_state_ConnectedToEthnnectedToAP
 
 /*****************************************************************************/
 class fsm_WiFi_state_ConnectedToAP : public fsm_WiFi_state
