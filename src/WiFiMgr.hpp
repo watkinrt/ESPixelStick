@@ -56,6 +56,7 @@ public:
     String    getHostname    () { return CurrentHostname; }
     void      setHostname    (String NewHostname ) { CurrentHostname = NewHostname; }
     void      GetStatus       (JsonObject & jsonStatus);
+    void      connectEth      ();
     void      connectWifi     (const String & ssid, const String & passphrase);
     void      reset           ();
     void      Poll ();

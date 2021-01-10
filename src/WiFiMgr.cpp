@@ -189,7 +189,7 @@ void c_WiFiMgr::GetStatus (JsonObject & jsonStatus)
 } // GetStatus
 
 //-----------------------------------------------------------------------------
-bool c_WiFiMgr::connectEth ()
+void c_WiFiMgr::connectEth ()
 {
     // DEBUG_START;
 
@@ -224,13 +224,12 @@ bool c_WiFiMgr::connectEth ()
     LOG_PORT.println (String(F ("\nEthernet Connecting as ")) +
                       config->hostname);
 
-    return status;
+    // return status;
 
     // DEBUG_END;
 } // connectEth
 
 //-----------------------------------------------------------------------------
-bool c_WiFiMgr::connectWifi ()
 void c_WiFiMgr::connectWifi (const String & ssid, const String & passphrase)
 {
     // DEBUG_START;
