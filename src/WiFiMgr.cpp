@@ -178,12 +178,8 @@ void c_WiFiMgr::GetStatus (JsonObject & jsonStatus)
     jsonStatus["rssi"]     = WiFi.RSSI ();
     jsonStatus[IP_NAME]    = getIpAddress ().toString ();
     jsonStatus["subnet"]   = getIpSubNetMask ().toString ();
-    jsonStatus["mac"]      = WiFi.macAddress ();
-#ifdef ARDUINO_ARCH_ESP8266
-    jsonStatus[HOSTNAME_NAME] = WiFi.hostname ();
-#else
-    jsonStatus[HOSTNAME_NAME] = WiFi.getHostname ();
-#endif // def ARDUINO_ARCH_ESP8266
+    jsonStatus["mac"]      = getMacAddress();
+    jsonStatus[HOSTNAME_NAME] = getHostname();
     jsonStatus[SSID_NAME]     = WiFi.SSID ();
 
  // DEBUG_END;
@@ -200,7 +196,17 @@ bool c_WiFiMgr::connectEth ()
 // #endif
     // DEBUG_V ("");
 
-    bool status = ETH.begin (PHY1, 13);
+    // @TODO The ethernet setup currently runs against default hardware setup.
+    // Rather than carry the configuration here, these defaults can be
+    // overridden as -D statement upon compilation. This should be documented at
+    // some point.
+    // begin(uint8_t phy_addr=ETH_PHY_ADDR, 
+    //       int power=ETH_PHY_POWER,
+    //       int mdc=ETH_PHY_MDC, 
+    //       int mdio=ETH_PHY_MDIO, 
+    //       eth_phy_type_t type=ETH_PHY_TYPE,
+    //       eth_clock_mode_t clk_mode=ETH_CLK_MODE);
+    bool status = ETH.begin ();
 
     // DEBUG_V (String ("config->hostname: ") + config->hostname);
     if (0 != config->hostname.length ())
@@ -210,6 +216,7 @@ bool c_WiFiMgr::connectEth ()
         // ETH.config (INADDR_NONE, INADDR_NONE, INADDR_NONE);
         ETH.setHostname (config->hostname.c_str ());
     }
+    WiFiMgr.setHostname(ETH.getHostname());
 
     LOG_PORT.println (String(F ("\nEthernet Connecting as ")) +
                       config->hostname);
@@ -250,6 +257,7 @@ bool c_WiFiMgr::connectWifi ()
         WiFi.setHostname (config->hostname.c_str ());
 #endif
     }
+    WiFiMgr.setHostname (WiFi.getHostname());
 
     LOG_PORT.println (String(F ("\nWiFi Connecting to ")) +
                       config->ssid +
@@ -377,7 +385,21 @@ void c_WiFiMgr::onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t in
 #endif
     // DEBUG_START;
 
-    pCurrentFsmState->OnConnect ();
+    // Check to see if WiFi is already connected. If so, restart manager. If
+    // not, initialize connected state
+    if (WiFiMgr.IsWiFiConnected() && event == WiFiEvent_t::SYSTEM_EVENT_ETH_GOT_IP) {
+        LOG_PORT.println (F ("Both network interfaces connected. Requesting Reboot"));
+        //@TODO I'm not sure if this is the best way to handle this, but trying
+        //to sort out the connections otherwise is somewhat involved. A reboot
+        //seems like the easiest way to go about this.
+        extern bool reboot;
+        reboot = true;
+    }
+    else {
+        pCurrentFsmState->OnConnect ();
+    }
+
+    
 
     // DEBUG_END;
 } // onWiFiConnect
@@ -515,8 +537,9 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::Poll ()
     // Check ethernet status first
     if (!eth_connected)
     {
-        // DEBUG_V (CurrentTimeMS- WiFiMgr.GetFsmStartTime());
-        if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (1000 * WiFiMgr.GetConfigPtr()->sta_timeout))
+        // @TODO Ethernet connection timeout is currently hardcoded to 10. Add
+        // to network config.
+        if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (5000))
         {
             LOG_PORT.println (F ("\nEthernet Failed to connect using Configured Credentials"));
             fsm_WiFi_state_ConnectingToEthDefault_imp.Init ();
@@ -553,6 +576,7 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::Init ()
 void fsm_WiFi_state_ConnectingToEthUsingConfig::OnConnect ()
 {
     // DEBUG_START;
+
     fsm_WiFi_state_ConnectedToEth_imp.Init ();
 
     // DEBUG_END;
@@ -571,7 +595,9 @@ void fsm_WiFi_state_ConnectingToEthUsingDefaults::Poll ()
 
     // Check ethernet status first
     if (! eth_connected) {
-        if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (1000 * WiFiMgr.GetConfigPtr()->sta_timeout))
+        // @TODO Ethernet connection timeout is currently hardcoded to 1s. Add
+        // to network config.
+        if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (1000))
         {
             LOG_PORT.println (F ("\nEthernet Failed to connect using default Credentials"));
             fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
@@ -761,6 +787,7 @@ void fsm_WiFi_state_ConnectingAsAP::Init ()
 
         WiFiMgr.setIpAddress (WiFi.localIP ());
         WiFiMgr.setIpSubNetMask (WiFi.subnetMask ());
+        WiFiMgr.setMacAddress (WiFi.macAddress());
 
         LOG_PORT.println (String (F ("WiFi SOFTAP: IP Address: '")) + WiFiMgr.getIpAddress().toString ());
     }
@@ -794,7 +821,7 @@ void fsm_WiFi_state_ConnectedToEth::Poll ()
     // DEBUG_START;
 
     // did we get silently disconnected?
-    if (!ETH.linkUp())
+    if (!eth_connected)
     {
      // DEBUG_V ("WiFi Handle Silent Disconnect");
         fsm_WiFi_state_ConnectedToEth_imp.OnDisconnect ();
@@ -816,6 +843,7 @@ void fsm_WiFi_state_ConnectedToEth::Init ()
 
     WiFiMgr.setIpAddress( ETH.localIP () );
     WiFiMgr.setIpSubNetMask( ETH.subnetMask () );
+    WiFiMgr.setMacAddress (ETH.macAddress());
 
     LOG_PORT.println (String (F ("Ethernet Connected with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 
@@ -868,6 +896,7 @@ void fsm_WiFi_state_ConnectedToAP::Init ()
 
     WiFiMgr.setIpAddress( WiFi.localIP () );
     WiFiMgr.setIpSubNetMask( WiFi.subnetMask () );
+    WiFiMgr.setMacAddress (WiFi.macAddress());
 
     LOG_PORT.println (String (F ("WiFi Connected with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 
@@ -920,6 +949,7 @@ void fsm_WiFi_state_ConnectedToSta::Init ()
 
     WiFiMgr.setIpAddress (WiFi.softAPIP ());
     WiFiMgr.setIpSubNetMask (IPAddress (255, 255, 255, 0));
+    WiFiMgr.setMacAddress (WiFi.macAddress());
 
     LOG_PORT.println (String (F ("\nWiFi Connected to STA with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 

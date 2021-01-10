@@ -51,6 +51,10 @@ public:
     void      setIpAddress    (IPAddress NewAddress ) { CurrentIpAddress = NewAddress; }
     IPAddress getIpSubNetMask () { return CurrentSubnetMask; }
     void      setIpSubNetMask (IPAddress NewAddress) { CurrentSubnetMask = NewAddress; }
+    String    getMacAddress    () { return CurrentMacAddress; }
+    void      setMacAddress    (String NewAddress ) { CurrentMacAddress = NewAddress; }
+    String    getHostname    () { return CurrentHostname; }
+    void      setHostname    (String NewHostname ) { CurrentHostname = NewHostname; }
     void      GetStatus       (JsonObject & jsonStatus);
     bool      connectEth      ();
     bool      connectWifi     ();
@@ -78,6 +82,8 @@ private:
     config_t           *config = nullptr;                           // Current configuration
     IPAddress           CurrentIpAddress  = IPAddress (0, 0, 0, 0);
     IPAddress           CurrentSubnetMask = IPAddress (0, 0, 0, 0);
+    String              CurrentMacAddress = "";
+    String              CurrentHostname   = "";
     time_t              NextPollTime = 0;
     bool                ReportedIsWiFiConnected = false;
     bool                ReportedIsEthConnected = false;
