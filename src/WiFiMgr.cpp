@@ -154,7 +154,7 @@ void c_WiFiMgr::Begin (config_t* NewConfig)
     wifiDisconnectHandler = WiFi.onStationModeDisconnected ([this](const WiFiEventStationModeDisconnected& event) {this->onWiFiDisconnect (event); });
 #else
     WiFi.onEvent(EthTrackingEvent);
-    WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_CONNECTED);
+    WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_GOT_IP);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiDisconnect (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_DISCONNECTED);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_STA_GOT_IP);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiDisconnect (event, info);}, WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
@@ -200,7 +200,7 @@ bool c_WiFiMgr::connectEth ()
 // #endif
     // DEBUG_V ("");
 
-    bool status = ETH.begin ();
+    bool status = ETH.begin (PHY1, 13);
 
     // DEBUG_V (String ("config->hostname: ") + config->hostname);
     if (0 != config->hostname.length ())
@@ -508,15 +508,19 @@ void fsm_WiFi_state_Boot::Init ()
 void fsm_WiFi_state_ConnectingToEthUsingConfig::Poll ()
 {
     // DEBUG_START;
-    DEBUG_V ("Eth config poll");
+    // DEBUG_V ("Eth config poll");
     // wait for the connection to complete via the callback function
     uint32_t CurrentTimeMS = millis ();
 
     // Check ethernet status first
     if (!eth_connected)
     {
-        LOG_PORT.println (F ("\nEthernet Failed to connect using Configured Credentials"));
-        fsm_WiFi_state_ConnectingToEthDefault_imp.Init ();
+        // DEBUG_V (CurrentTimeMS- WiFiMgr.GetFsmStartTime());
+        if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (1000 * WiFiMgr.GetConfigPtr()->sta_timeout))
+        {
+            LOG_PORT.println (F ("\nEthernet Failed to connect using Configured Credentials"));
+            fsm_WiFi_state_ConnectingToEthDefault_imp.Init ();
+        }
     }
 
     // DEBUG_END;
@@ -527,7 +531,7 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::Poll ()
 void fsm_WiFi_state_ConnectingToEthUsingConfig::Init ()
 {
     // DEBUG_START;
-    DEBUG_V ("Eth config init");
+    // DEBUG_V ("Eth config init");
     WiFiMgr.SetFsmState (this);
     WiFiMgr.AnnounceState ();
     WiFiMgr.SetFsmStartTime (millis ());
@@ -538,7 +542,7 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::Init ()
     //@TODO This is currently a hack. I think we need to initialize the WiFi to
     //other things down the line to work properly, but I don't fully understand
     //this yet.
-    WiFiMgr.connectWifi ();
+    // WiFiMgr.connectWifi ();
 
     // DEBUG_END;
 
@@ -549,10 +553,7 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::Init ()
 void fsm_WiFi_state_ConnectingToEthUsingConfig::OnConnect ()
 {
     // DEBUG_START;
-
-    if (eth_connected) {
-        fsm_WiFi_state_ConnectedToEth_imp.Init ();
-    }
+    fsm_WiFi_state_ConnectedToEth_imp.Init ();
 
     // DEBUG_END;
 
@@ -564,14 +565,17 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::OnConnect ()
 void fsm_WiFi_state_ConnectingToEthUsingDefaults::Poll ()
 {
     // DEBUG_START;
-    DEBUG_V ("Eth default poll");
+    // DEBUG_V ("Eth default poll");
     // wait for the connection to complete via the callback function
     uint32_t CurrentTimeMS = millis ();
 
     // Check ethernet status first
     if (! eth_connected) {
-        LOG_PORT.println (F ("\nEthernet Failed to connect using default Credentials"));
-        fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
+        if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (1000 * WiFiMgr.GetConfigPtr()->sta_timeout))
+        {
+            LOG_PORT.println (F ("\nEthernet Failed to connect using default Credentials"));
+            fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
+        }
     }
 
     // DEBUG_END;
@@ -602,9 +606,7 @@ void fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect ()
 {
     // DEBUG_START;
 
-    if (eth_connected) {
-        fsm_WiFi_state_ConnectedToEth_imp.Init ();
-    }
+    fsm_WiFi_state_ConnectedToEth_imp.Init ();
 
     // DEBUG_END;
 
