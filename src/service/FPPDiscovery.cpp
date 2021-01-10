@@ -445,7 +445,7 @@ void c_FPPDiscovery::sendPingPacket (IPAddress destination)
 
     packet.operatingMode = (AllowedToRemotePlayFiles()) ? 0x08 : 0x01; // Support remote mode : Bridge Mode
 
-    uint32_t ip = static_cast<uint32_t>(WiFi.localIP ());
+    uint32_t ip = static_cast<uint32_t>(WiFiMgr.getIpAddress ());
     memcpy (packet.ipAddress, &ip, 4);
     strcpy (packet.hostName, config.hostname.c_str());
     strcpy (packet.version, (VERSION + String (":") + BUILD_DATE).c_str());
@@ -722,7 +722,7 @@ void c_FPPDiscovery::ProcessBody (AsyncWebServerRequest* request, uint8_t* data,
 void c_FPPDiscovery::GetSysInfoJSON (JsonObject & jsonResponse)
 {
     // DEBUG_START;
-
+    DEBUG_V(config.hostname);
     jsonResponse[F ("HostName")]        = config.hostname;
     jsonResponse[F ("HostDescription")] = config.id;
     jsonResponse[F ("Platform")]        = F("ESPixelStick");
@@ -743,7 +743,7 @@ void c_FPPDiscovery::GetSysInfoJSON (JsonObject & jsonResponse)
 
     jsonResponse[F ("rssi")] = WiFi.RSSI ();
     JsonArray jsonResponseIpAddresses = jsonResponse.createNestedArray (F ("IPS"));
-    jsonResponseIpAddresses.add(WiFi.localIP ().toString ());
+    jsonResponseIpAddresses.add(WiFiMgr.getIpAddress().toString ());
 
     // DEBUG_END;
 

@@ -302,7 +302,7 @@ void c_InputDDP::ProcessReceivedQuery ()
 
     sendDiscoveryResponse (
         VERSION,
-        WiFi.macAddress (),
+        WiFiMgr.getMacAddress (),
         config.id,
         pixelPorts,
         serialPorts,

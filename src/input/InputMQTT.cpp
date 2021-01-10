@@ -23,6 +23,7 @@
 #include <Int64String.h>
 #include "InputMQTT.h"
 #include "InputEffectEngine.hpp"
+#include "../WiFiMgr.hpp"
 
 #if defined ARDUINO_ARCH_ESP32
 #   include <functional>
@@ -290,7 +291,7 @@ void c_InputMQTT::onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
     // DEBUG_START;
 
     LOG_PORT.println(F("- MQTT Disconnected"));
-    if (WiFi.isConnected ())
+    if (WiFiMgr.IsWiFiConnected () | WiFiMgr.IsEthConnected ())
     {
         // set up a two second delayed action.
         mqttTicker.once (2, +[](c_InputMQTT* pMe) { pMe->connectToMqtt (); }, this);
@@ -420,7 +421,7 @@ void c_InputMQTT::publishHA()
         JsonConfig["unique_id"] = "ESPixelStick_" + chipId;
 
         JsonObject device = JsonConfig.createNestedObject (DEVICE_NAME);
-        device["identifiers"]  = WiFi.macAddress ();
+        device["identifiers"]  = WiFiMgr.getMacAddress ();
         device["manufacturer"] = "ESPixelStick";
         device["model"]        = "Pixel Controller";
 //TODO: Fix this

@@ -20,13 +20,14 @@
 
 #include "../ESPixelStick.h"
 #include "../FileMgr.hpp"
+#include "../WiFiMgr.hpp"
 
 #ifdef ESP32
-#	include <WiFi.h>
+// #	include <WiFi.h>
 #	include <AsyncUDP.h>
 #elif defined (ESP8266)
 #	include <ESPAsyncUDP.h>
-#	include <ESP8266WiFi.h>
+// #	include <ESP8266WiFi.h>
 #	include <ESP8266WiFiMulti.h>
 #else
 #	error Platform not supported

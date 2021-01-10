@@ -241,7 +241,7 @@ boolean c_InputE131::SetConfig (ArduinoJson::JsonObject& jsonConfig)
 void c_InputE131::SubscribeToMulticastDomains()
 {
     uint8_t count = LastUniverse - startUniverse + 1;
-    IPAddress ifaddr = WiFi.localIP ();
+    IPAddress ifaddr = WiFiMgr.getIpAddress ();
     IPAddress multicast_addr;
 
     for (uint8_t UniverseIndex = 0; UniverseIndex < count; ++UniverseIndex)
