@@ -56,8 +56,7 @@ public:
     String    getHostname    () { return CurrentHostname; }
     void      setHostname    (String NewHostname ) { CurrentHostname = NewHostname; }
     void      GetStatus       (JsonObject & jsonStatus);
-    bool      connectEth      ();
-    bool      connectWifi     ();
+    void      connectWifi     (const String & ssid, const String & passphrase);
     void      reset           ();
     void      Poll ();
 
@@ -95,10 +94,11 @@ private:
     void onWiFiConnect (const WiFiEventStationModeGotIP& event);
     void onWiFiDisconnect (const WiFiEventStationModeDisconnected& event);
 #else
-    // void onEthConnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
-    // void onEthDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
-    void onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
+    void onWiFiConnect    (const WiFiEvent_t event, const WiFiEventInfo_t info);
     void onWiFiDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
+
+    void onWiFiStaConn    (const WiFiEvent_t event, const WiFiEventInfo_t info);
+    void onWiFiStaDisc    (const WiFiEvent_t event, const WiFiEventInfo_t info);
 #endif
 
 protected:
