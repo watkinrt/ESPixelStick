@@ -22,8 +22,11 @@
 #ifdef ARDUINO_ARCH_ESP8266
 #   include <eagle_soc.h>
 #   include <ets_sys.h>
+#   include <SPI.h>
+#   include <Ethernet.h>
 #else
 #   include <esp_wifi.h>
+#   include <ETH.h>
 #endif // def ARDUINO_ARCH_ESP8266
 
 #include "WiFiMgr.hpp"
@@ -45,6 +48,7 @@ const String passphrase = SECRETS_PASS;
 // Ethernet connection status as ETH doesn't currently have a status function
 static bool eth_connected = false;
 
+#ifndef ARDUINO_ARCH_ESP8266
 void EthTrackingEvent(WiFiEvent_t event)
 {
   switch (event) {
@@ -81,7 +85,7 @@ void EthTrackingEvent(WiFiEvent_t event)
       break;
   }
 }
-
+#endif
 /// Radio configuration
 /** ESP8266 radio configuration routines that are executed at startup. */
 /* Disabled for now, possible flash wear issue. Need to research further
@@ -192,10 +196,10 @@ void c_WiFiMgr::GetStatus (JsonObject & jsonStatus)
 void c_WiFiMgr::connectEth ()
 {
     // DEBUG_START;
-
+    #ifndef ARDUINO_ARCH_ESP8266
     // disconnect just in case
 // #ifdef ARDUINO_ARCH_ESP8266
-//     return
+//     return;
 // #endif
     // DEBUG_V ("");
 
@@ -209,7 +213,7 @@ void c_WiFiMgr::connectEth ()
     //       int mdio=ETH_PHY_MDIO, 
     //       eth_phy_type_t type=ETH_PHY_TYPE,
     //       eth_clock_mode_t clk_mode=ETH_CLK_MODE);
-    bool status = ETH.begin ();
+    ETH.begin ();
 
     // DEBUG_V (String ("config->hostname: ") + config->hostname);
     if (0 != config->hostname.length ())
@@ -223,8 +227,7 @@ void c_WiFiMgr::connectEth ()
 
     LOG_PORT.println (String(F ("\nEthernet Connecting as ")) +
                       config->hostname);
-
-    // return status;
+    #endif
 
     // DEBUG_END;
 } // connectEth
@@ -260,7 +263,11 @@ void c_WiFiMgr::connectWifi (const String & ssid, const String & passphrase)
         WiFi.setHostname (config->hostname.c_str ());
 #endif
     }
+#ifdef ARDUINO_ARCH_ESP8266
+    WiFiMgr.setHostname (WiFi.hostname());
+#else
     WiFiMgr.setHostname (WiFi.getHostname());
+#endif
 
     LOG_PORT.println (String(F ("\nWiFi Connecting to '")) +
                       ssid +
@@ -292,7 +299,7 @@ void c_WiFiMgr::reset ()
 void c_WiFiMgr::SetUpEthIp ()
 {
     // DEBUG_START;
-
+    #ifndef ARDUINO_ARCH_ESP8266
     do // once
     {
         if (true == config->UseDhcp)
@@ -328,7 +335,7 @@ void c_WiFiMgr::SetUpEthIp ()
         LOG_PORT.println (F ("Connected to Ethernet with Static IP"));
 
     } while (false);
-
+    #endif
     // DEBUG_END;
 
 } // SetUpIp
@@ -407,7 +414,11 @@ void c_WiFiMgr::onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t in
 
     // Check to see if WiFi is already connected. If so, restart manager. If
     // not, initialize connected state
+#ifdef ARDUINO_ARCH_ESP8266
+    if (false) {
+#else
     if (WiFiMgr.IsWiFiConnected() && event == WiFiEvent_t::SYSTEM_EVENT_ETH_GOT_IP) {
+#endif
         LOG_PORT.println (F ("Both network interfaces connected. Requesting Reboot"));
         //@TODO I'm not sure if this is the best way to handle this, but trying
         //to sort out the connections otherwise is somewhat involved. A reboot
@@ -523,9 +534,11 @@ void fsm_WiFi_state_Boot::Poll ()
     // DEBUG_START;
 
     // Start trying to connect to based on input config
+#ifdef ARDUINO_ARCH_ESP8266
+    fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
+#else
     fsm_WiFi_state_ConnectingToEthUsingConfig_imp.Init ();
-    // fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
-
+#endif
     // DEBUG_END;
 } // fsm_WiFi_state_boot
 
@@ -859,8 +872,8 @@ void fsm_WiFi_state_ConnectedToEth::Poll ()
 // Wait for events
 void fsm_WiFi_state_ConnectedToEth::Init ()
 {
+#ifndef ARDUINO_ARCH_ESP8266
     // DEBUG_START;
-
     WiFiMgr.SetFsmState (this);
     WiFiMgr.AnnounceState ();
 
@@ -874,7 +887,7 @@ void fsm_WiFi_state_ConnectedToEth::Init ()
 
     WiFiMgr.SetIsEthConnected (true);
     InputMgr.WiFiStateChanged (true);
-
+#endif
     // DEBUG_END;
 } // fsm_WiFi_state_ConnectedToEth::Init
 

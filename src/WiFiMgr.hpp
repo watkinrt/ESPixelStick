@@ -24,7 +24,6 @@
 #   include <ESP8266WiFi.h>
 #else
 #   include <WiFi.h>
-#   include <ETH.h>
 #endif // def ARDUINO_ARCH_ESP8266
 
 // forward declaration
