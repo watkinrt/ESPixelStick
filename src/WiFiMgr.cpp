@@ -2,7 +2,7 @@
 * WiFiMgr.cpp - Output Management class
 *
 * Project: ESPixelStick - An ESP8266 / ESP32 and E1.31 based pixel driver
-* Copyright (c) 2020 Shelby Merrick
+* Copyright (c) 2021 Shelby Merrick
 * http://www.forkineye.com
 *
 *  This program is provided free for you to use in any way that you wish,
@@ -461,31 +461,31 @@ int c_WiFiMgr::ValidateConfig (config_t* NewConfig)
 
     int response = 0;
 
-    if (!NewConfig->ssid.length ())
+    if (0 == NewConfig->ssid.length ())
     {
-        // NewConfig->ssid = ssid;
-     // DEBUG_V ();
+        NewConfig->ssid = ssid;
+        // DEBUG_V ();
         response++;
     }
 
-    if (!NewConfig->passphrase.length ())
+    if (0 == NewConfig->passphrase.length ())
     {
-        // NewConfig->passphrase = passphrase;
-     // DEBUG_V ();
+        NewConfig->passphrase = passphrase;
+        // DEBUG_V ();
         response++;
     }
 
     if (NewConfig->sta_timeout < 5)
     {
         NewConfig->sta_timeout = CLIENT_TIMEOUT;
-     // DEBUG_V ();
+        // DEBUG_V ();
         response++;
     }
 
     if (NewConfig->ap_timeout < 15)
     {
         NewConfig->ap_timeout = AP_TIMEOUT;
-     // DEBUG_V ();
+        // DEBUG_V ();
         response++;
     }
 

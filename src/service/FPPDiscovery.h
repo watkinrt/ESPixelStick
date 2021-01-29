@@ -19,8 +19,9 @@
 */
 
 #include "../ESPixelStick.h"
-#include "../FileMgr.hpp"
 #include "../WiFiMgr.hpp"
+// #include "../FileMgr.hpp"
+#include "../input/InputFPPRemotePlayFile.hpp"
 
 #ifdef ESP32
 // #	include <WiFi.h>
@@ -33,50 +34,42 @@
 #	error Platform not supported
 #endif
 
-
 #include <ESPAsyncWebServer.h>
 
 class c_FPPDiscovery
 {
-public:
-
-#   define Stop_FPP_RemotePlay "..."
-
 private:
 
     AsyncUDP udp;
     void ProcessReceivedUdpPacket (AsyncUDPPacket _packet);
     void ProcessSyncPacket (uint8_t action, String filename, uint32_t frame);
     void ProcessBlankPacket ();
+    bool PlayingFile () { return !InputFPPRemotePlayFile.IsIdle (); }
 
-    bool isRemoteRunning = false;
-    c_FileMgr::FileId fseqFile;
-    String fseqName = "";
-    String failedFseqName = "";
-    String AutoPlayFileName = Stop_FPP_RemotePlay;
-    unsigned long fseqStartMillis = 0;
-    int fseqCurrentFrameId = 0;
-    uint32_t dataOffset = 0;
-    uint32_t channelsPerFrame = 0;
-    uint8_t  frameStepTime = 0;
-    uint32_t TotalNumberOfFramesInSequence = 0;
-    uint8_t* outputBuffer;
-    uint16_t outputBufferSize;
     bool inFileUpload = false;
     bool hasBeenInitialized = false;
     bool IsEnabled = false;
-    uint8_t* buffer = nullptr;
-    int bufCurPos = 0;
+//    uint8_t* buffer = nullptr;
+//    int bufCurPos = 0;
     String UploadFileName;
-    uint32_t SyncCount = 0;
-    uint32_t SyncAdjustmentCount = 0;
+//    uint32_t SyncCount = 0;
+//    uint32_t SyncAdjustmentCount = 0;
     IPAddress FppRemoteIp = IPAddress (uint32_t(0));
+    c_InputFPPRemotePlayFile InputFPPRemotePlayFile;
 
     void GetSysInfoJSON    (JsonObject& jsonResponse);
     void BuildFseqResponse (String fname, c_FileMgr::FileId fseq, String & resp);
     void StopPlaying       ();
     void StartPlaying      (String & filename, uint32_t frameId);
     bool AllowedToRemotePlayFiles ();
+
+#ifdef ARDUINO_ARCH_ESP8266
+    WiFiEventHandler    wifiConnectHandler;     // WiFi connect handler
+    void onWiFiConnect (const WiFiEventStationModeGotIP& event);
+#else
+    void onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
+#endif
+
 
 public:
     c_FPPDiscovery ();
@@ -89,7 +82,7 @@ public:
     void ProcessFile      (AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final);
     void ProcessBody      (AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total);
     void ReadNextFrame    (uint8_t* outputBuffer, uint16_t outputBufferSize);
-    void sendPingPacket    (IPAddress destination = IPAddress(255, 255, 255, 255));
+    void sendPingPacket   (IPAddress destination = IPAddress(255, 255, 255, 255));
     void PlayFile         (String & FileToPlay);
     void Enable           (void);
     void Disable          (void);
