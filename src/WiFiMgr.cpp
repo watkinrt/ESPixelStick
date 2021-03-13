@@ -182,12 +182,16 @@ void c_WiFiMgr::GetStatus (JsonObject & jsonStatus)
 {
  // DEBUG_START;
 
-    jsonStatus["rssi"]     = WiFi.RSSI ();
-    jsonStatus[IP_NAME]    = getIpAddress ().toString ();
-    jsonStatus["subnet"]   = getIpSubNetMask ().toString ();
-    jsonStatus["mac"]      = getMacAddress();
-    jsonStatus[HOSTNAME_NAME] = getHostname();
-    jsonStatus[SSID_NAME]     = WiFi.SSID ();
+    jsonStatus[CN_rssi]   = WiFi.RSSI ();
+    jsonStatus[CN_ip]     = getIpAddress ().toString ();
+    jsonStatus[CN_subnet] = getIpSubNetMask ().toString ();
+    jsonStatus[CN_mac]    = WiFi.macAddress ();
+#ifdef ARDUINO_ARCH_ESP8266
+    jsonStatus[CN_hostname] = WiFi.hostname ();
+#else
+    jsonStatus[CN_hostname] = WiFi.getHostname ();
+#endif // def ARDUINO_ARCH_ESP8266
+    jsonStatus[CN_ssid]       = WiFi.SSID ();
 
  // DEBUG_END;
 } // GetStatus
@@ -289,7 +293,7 @@ void c_WiFiMgr::reset ()
     fsm_WiFi_state_Boot_imp.Init ();
     if (IsWiFiConnected())
     {
-        InputMgr.WiFiStateChanged (false);
+        InputMgr.NetworkStateChanged (false);
     }
 
     // DEBUG_END;
@@ -886,7 +890,7 @@ void fsm_WiFi_state_ConnectedToEth::Init ()
     LOG_PORT.println (String (F ("Ethernet Connected with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 
     WiFiMgr.SetIsEthConnected (true);
-    InputMgr.WiFiStateChanged (true);
+    InputMgr.NetworkStateChanged (true);
 #endif
     // DEBUG_END;
 } // fsm_WiFi_state_ConnectedToEth::Init
@@ -939,7 +943,7 @@ void fsm_WiFi_state_ConnectedToAP::Init ()
     LOG_PORT.println (String (F ("WiFi Connected with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 
     WiFiMgr.SetIsWiFiConnected (true);
-    InputMgr.WiFiStateChanged (true);
+    InputMgr.NetworkStateChanged (true);
 
     // DEBUG_END;
 } // fsm_WiFi_state_ConnectingAsAP::Init
@@ -992,7 +996,7 @@ void fsm_WiFi_state_ConnectedToSta::Init ()
     LOG_PORT.println (String (F ("\nWiFi Connected to STA with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 
     WiFiMgr.SetIsWiFiConnected (true);
-    InputMgr.WiFiStateChanged (true);
+    InputMgr.NetworkStateChanged (true);
 
 
     // DEBUG_END;
@@ -1024,7 +1028,7 @@ void fsm_WiFi_state_ConnectionFailed::Init ()
     if (WiFiMgr.IsWiFiConnected())
     {
         WiFiMgr.SetIsWiFiConnected (false);
-        InputMgr.WiFiStateChanged (false);
+        InputMgr.NetworkStateChanged (false);
     }
     else
     {

@@ -64,14 +64,21 @@ $(function ()
     // DHCP field toggles
     $('#network #dhcp').change(function () {
         if ($(this).is(':checked')) {
+            $('.dhcp').removeClass('hidden');
             $('.dhcp').addClass('hidden');
         }
         else {
             $('.dhcp').removeClass('hidden');
         }
+        $('#btn_wifi').prop("disabled", ValidateConfigFields($("#network input")));
     });
 
-    $('#DeviceConfigSave').click(function () {
+    $('#network').on("input", (function () {
+        $('#btn_wifi').prop("disabled", ValidateConfigFields($("#network input")));
+    }));
+
+    $('#DeviceConfigSave').click(function ()
+    {
         submitDeviceConfig();
     });
 
@@ -304,7 +311,7 @@ function ProcessModeConfigurationDatafppremote(channelConfig)
     // remove the existing options
     $(jqSelector).empty();
 
-    $(jqSelector).append('<option value=>Play Remote Sequence</option>');
+    $(jqSelector).append('<option value="...">Play Remote Sequence</option>');
 
     // for each file in the list
     Fseq_File_List.files.forEach(function (listEntry) {
@@ -340,7 +347,7 @@ function ProcessModeConfigurationDataRelay(RelayConfig)
 {
     // console.log("relaychannelconfigurationtable.rows.length = " + $('#relaychannelconfigurationtable tr').length);
 
-    $('#updateinterval').val(parseInt(RelayConfig.updateinterval,10));
+    $('#updateinterval').val(parseInt(RelayConfig.ui,10));
 
     var ChannelConfigs = RelayConfig.channels;
 
@@ -375,15 +382,78 @@ function ProcessModeConfigurationDataRelay(RelayConfig)
         // console.log("Current Channel Id = " + CurrentChannelConfig.id);
         var currentChannelRowId = CurrentChannelConfig.id + 1;
         $('#chanId_'     + (currentChannelRowId)).html(currentChannelRowId);
-        $('#Enabled_'    + (currentChannelRowId)).prop("checked", CurrentChannelConfig.enabled);
-        $('#Inverted_'   + (currentChannelRowId)).prop("checked", CurrentChannelConfig.invertoutput);
-        $('#gpioId_'     + (currentChannelRowId)).val(CurrentChannelConfig.gpioid);
-        $('#threshhold_' + (currentChannelRowId)).val(CurrentChannelConfig.onofftriggerlevel);
+        $('#Enabled_'    + (currentChannelRowId)).prop("checked", CurrentChannelConfig.en);
+        $('#Inverted_'   + (currentChannelRowId)).prop("checked", CurrentChannelConfig.inv);
+        $('#gpioId_'     + (currentChannelRowId)).val(CurrentChannelConfig.gid);
+        $('#threshhold_' + (currentChannelRowId)).val(CurrentChannelConfig.trig);
     });
 
 } // ProcessModeConfigurationDataRelay
 
-function ProcessInputConfig ()
+function ProcessModeConfigurationDataServoPCA9685(ServoConfig)
+{
+    // console.log("Servochannelconfigurationtable.rows.length = " + $('#servo_pca9685channelconfigurationtable tr').length);
+
+    $('#updateinterval').val(parseInt(ServoConfig.ui, 10));
+
+    var ChannelConfigs = ServoConfig.channels;
+
+    while (1 < $('#servo_pca9685channelconfigurationtable tr').length) {
+        // console.log("Deleting $('#servo_pca9685channelconfigurationtable tr').length " + $('#servo_pca9685channelconfigurationtable tr').length);
+        ServoTableRef.last().remove();
+        // console.log("After Delete: $('#servo_pca9685channelconfigurationtable tr').length " + $('#servo_pca9685channelconfigurationtable tr').length);
+    }
+
+    // add as many rows as we need
+    for (var CurrentRowId = 1; CurrentRowId <= ChannelConfigs.length; CurrentRowId++) {
+        // console.log("CurrentRowId = " + CurrentRowId);
+        var ChanIdPattern   = '<td                        id="ServoChanId_'                  + (CurrentRowId) + '">a</td>';
+        var EnabledPattern  = '<td><input type="checkbox" id="ServoEnabled_'                 + (CurrentRowId) + '"></td>';
+        var MinLevelPattern = '<td><input type="number"   id="ServoMinLevel_'                + (CurrentRowId) + '"step="1" min="10" max="4095"  value="0"  class="form-control is-valid"></td>';
+        var MaxLevelPattern = '<td><input type="number"   id="ServoMaxLevel_'                + (CurrentRowId) + '"step="1" min="10" max="4095"  value="0"  class="form-control is-valid"></td>';
+        var DataType        = '<td><select class="form-control is-valid" id="ServoDataType_' + (CurrentRowId) + '" title="Effect to generate"></select></td>';
+
+        var rowPattern = '<tr>' + ChanIdPattern + EnabledPattern + MinLevelPattern + MaxLevelPattern + DataType + '</tr>';
+        $('#servo_pca9685channelconfigurationtable tr:last').after(rowPattern);
+
+        $('#ServoChanId_'   + CurrentRowId).attr('style', $('#ServoChanId_hr').attr('style'));
+        $('#ServoEnabled_'  + CurrentRowId).attr('style', $('#ServoEnabled_hr').attr('style'));
+        $('#ServoMinLevel_' + CurrentRowId).attr('style', $('#ServoMinLevel_hr').attr('style'));
+        $('#ServoMaxLevel_' + CurrentRowId).attr('style', $('#ServoMaxLevel_hr').attr('style'));
+        $('#ServoDataType_' + CurrentRowId).attr('style', $('#ServoDataType_hr').attr('style'));
+    }
+
+
+    $.each(ChannelConfigs, function (i, CurrentChannelConfig) {
+        // console.log("Current Channel Id = " + CurrentChannelConfig.id);
+        var currentChannelRowId = CurrentChannelConfig.id + 1;
+        $('#ServoChanId_'   + (currentChannelRowId)).html(currentChannelRowId);
+        $('#ServoEnabled_'  + (currentChannelRowId)).prop("checked", CurrentChannelConfig.en);
+        $('#ServoMinLevel_' + (currentChannelRowId)).val(CurrentChannelConfig.Min);
+        $('#ServoMaxLevel_' + (currentChannelRowId)).val(CurrentChannelConfig.Max);
+
+        var jqSelector = "#ServoDataType_" + (currentChannelRowId);
+
+        // remove the existing options
+        $(jqSelector).empty();
+        $(jqSelector).append('<option value=0> 8 Bit Absolute</option>');
+        $(jqSelector).append('<option value=1> 8 Bit Absolute Reversed</option>');
+        $(jqSelector).append('<option value=2> 8 Bit Scaled</option>');
+        $(jqSelector).append('<option value=3> 8 Bit Scaled - Reversed</option>');
+        $(jqSelector).append('<option value=4>16 Bit Absolute</option>');
+        $(jqSelector).append('<option value=5>16 Bit Absolute - Reversed</option>');
+        $(jqSelector).append('<option value=6>16 Bit Scaled</option>');
+        $(jqSelector).append('<option value=7>16 Bit Scaled - Reversed</option>');
+
+        // set the current selector value
+        $(jqSelector).val((CurrentChannelConfig.rev << 0) +
+                          (CurrentChannelConfig.sca << 1) +
+                          (CurrentChannelConfig.b16 << 2) );
+    });
+
+} // ProcessModeConfigurationDataServoPCA9685
+
+function ProcessInputConfig()
 {
     $("#ecb_enable").prop("checked", Input_Config.ecb.enabled);
     $("#ecb_gpioid").val(Input_Config.ecb.id);
@@ -395,7 +465,7 @@ function ProcessModeConfigurationData(channelId, ChannelTypeName, JsonConfig )
 {
     // console.info("ProcessModeConfigurationData: Start");
 
-    // determine the type of output that has been selected and populate the form
+    // determine the type of in/output that has been selected and populate the form
     var TypeOfChannelId = parseInt($('#' + ChannelTypeName +  channelId + " option:selected").val(), 10);
     var channelConfigSet = JsonConfig.channels[channelId];
 
@@ -410,6 +480,15 @@ function ProcessModeConfigurationData(channelId, ChannelTypeName, JsonConfig )
     ChannelTypeName = ChannelTypeName.replace(" ", "_");
     // console.info("ChannelTypeName: " + ChannelTypeName);
 
+    var FieldSet = $('#fs_' + ChannelTypeName + ' input');
+    if (0 < FieldSet.length)
+    {
+        $('#fs_' + ChannelTypeName).on("input", (function ()
+        {
+            $('#DeviceConfigSave').prop("disabled", ValidateConfigFields(FieldSet));
+        }));
+    }
+
     // clear the array
     selector = [];
 
@@ -422,21 +501,31 @@ function ProcessModeConfigurationData(channelId, ChannelTypeName, JsonConfig )
     // clear the array
     selector = [];
 
-    if (("fpp_remote" === ChannelTypeName) && (null !== Fseq_File_List))
+    if ("fpp_remote" === ChannelTypeName)
     {
-        ProcessModeConfigurationDatafppremote(channelConfig);
+        if (null !== Fseq_File_List)
+        {
+            ProcessModeConfigurationDatafppremote(channelConfig);
+        }
     }
 
-    if ("effects" === ChannelTypeName)
+    else if ("effects" === ChannelTypeName)
     {
         ProcessModeConfigurationDataEffects(channelConfig);
     }
 
-    if ("relay" === ChannelTypeName)
+    else if ("relay" === ChannelTypeName)
     {
         // console.info("ProcessModeConfigurationData: relay");
         ProcessModeConfigurationDataRelay(channelConfig);
     }
+
+    else if ("servo_pca9685" === ChannelTypeName)
+    {
+        // console.info("ProcessModeConfigurationData: servo");
+        ProcessModeConfigurationDataServoPCA9685(channelConfig);
+    }
+
     // console.info("ProcessModeConfigurationData: End");
 
 } // ProcessModeConfigurationData
@@ -679,10 +768,24 @@ function ExtractChannelConfigFromHtmlPage(JsonConfig, SectionName)
             $.each(ChannelConfig.channels, function (i, CurrentChannelConfig) {
                 // console.info("Current Channel Id = " + CurrentChannelConfig.id);
                 var currentChannelRowId = CurrentChannelConfig.id + 1;
-                CurrentChannelConfig.enabled = $('#Enabled_' + (currentChannelRowId)).prop("checked");
-                CurrentChannelConfig.invertoutput = $('#Inverted_' + (currentChannelRowId)).prop("checked");
-                CurrentChannelConfig.gpioid = parseInt($('#gpioId_' + (currentChannelRowId)).val(), 10);
-                CurrentChannelConfig.onofftriggerlevel = parseInt($('#threshhold_' + (currentChannelRowId)).val(), 10);
+                CurrentChannelConfig.en   = $('#Enabled_' + (currentChannelRowId)).prop("checked");
+                CurrentChannelConfig.inv  = $('#Inverted_' + (currentChannelRowId)).prop("checked");
+                CurrentChannelConfig.gid  = parseInt($('#gpioId_' + (currentChannelRowId)).val(), 10);
+                CurrentChannelConfig.trig = parseInt($('#threshhold_' + (currentChannelRowId)).val(), 10);
+            });
+        }
+        else if ((ChannelConfig.type === "Servo PCA9685") && ($("#servo_pca9685channelconfigurationtable").length)) {
+            $.each(ChannelConfig.channels, function (i, CurrentChannelConfig) {
+                // console.info("Current Channel Id = " + CurrentChannelConfig.id);
+                var currentChannelRowId = CurrentChannelConfig.id + 1;
+                CurrentChannelConfig.en  = $('#ServoEnabled_' + (currentChannelRowId)).prop("checked");
+                CurrentChannelConfig.Min = parseInt($('#ServoMinLevel_' + (currentChannelRowId)).val(), 10);
+                CurrentChannelConfig.Max = parseInt($('#ServoMaxLevel_' + (currentChannelRowId)).val(), 10);
+                var ServoDataType        = parseInt($('#ServoDataType_' + (currentChannelRowId)).val(), 10);
+
+                CurrentChannelConfig.rev = (ServoDataType & 0x01) ? true : false;
+                CurrentChannelConfig.sca = (ServoDataType & 0x02) ? true : false;
+                CurrentChannelConfig.b16 = (ServoDataType & 0x04) ? true : false;
             });
         }
         else
@@ -701,6 +804,34 @@ function ExtractChannelConfigFromHtmlPage(JsonConfig, SectionName)
 
 } // ExtractChannelConfigFromHtmlPage
 
+function ValidateConfigFields(ElementList)
+{
+    // return true if errors were found
+    var response = false;
+
+    for (var ChildElementId = 0;
+         ChildElementId < ElementList.length;
+         ChildElementId++)
+    {
+        var ChildElement = ElementList[ChildElementId];
+        var ChildType = ChildElement.type;
+
+        if ((ChildElement.validity.valid !== undefined) && (!$(ChildElement).hasClass('hidden')))
+        {
+            // console.info("ChildElement.validity.valid: " + ChildElement.validity.valid);
+            if (false === ChildElement.validity.valid)
+            {
+                // console.info("          Element: " + ChildElement.id);
+                // console.info("   ChildElementId: " + ChildElementId);
+                // console.info("ChildElement Type: " + ChildType);
+                response = true;
+            }
+        }
+    }
+    return response;
+
+} // ValidateConfigFields
+
 // Build dynamic JSON config submission for "Device" tab
 function submitDeviceConfig()
 {
@@ -715,8 +846,6 @@ function submitDeviceConfig()
     wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'device': Device_Config } } }));
     wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'input':  { 'input_config': Input_Config } } } }));
     wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'output': { 'output_config': Output_Config } } } }));
-
-    return;
 
 } // submitDeviceConfig
 
@@ -1035,13 +1164,15 @@ function ProcessRecievedJsonAdminMessage(data)
 
 } // ProcessRecievedJsonAdminMessage
 
-//ProcessRecievedJsonStatusMessage
+// ProcessRecievedJsonStatusMessage
 function ProcessRecievedJsonStatusMessage(data)
 {
-    JsonStat = JSON.parse(data);
-    var Status = JsonStat.status;
-    var System = Status.system;
-    var rssi = System.rssi;
+    console.info("Status: " + data);
+
+    var JsonStat = JSON.parse(data);
+    var Status  = JsonStat.status;
+    var System  = Status.system;
+    var rssi    = System.rssi;
     var quality = 2 * (rssi + 100);
 
     if (rssi <= -100)
@@ -1116,13 +1247,89 @@ function ProcessRecievedJsonStatusMessage(data)
     {
         $('#FPPRemoteStatus').removeClass("hidden")
 
-        $('#fppsyncreceived').text(Status.system.FPPDiscovery.SyncCount);
-        $('#fppsyncadjustments').text(Status.system.FPPDiscovery.SyncAdjustmentCount);
-        $('#fppremoteip').text(Status.system.FPPDiscovery.FppRemoteIp);
+        var FPPDstatus = Status.system.FPPDiscovery
+
+        $('#fppsyncreceived').text(FPPDstatus.SyncCount);
+        $('#fppsyncadjustments').text(FPPDstatus.SyncAdjustmentCount);
+        $('#fppremoteip').text(FPPDstatus.FppRemoteIp);
+
+        $('#fppremoteFilePlayerFilename').text(FPPDstatus.current_sequence);
+        $('#fppremoteFilePlayerTimeElapsed').text(FPPDstatus.time_elapsed);
+        $('#fppremoteFilePlayerTimeRemaining').text(FPPDstatus.time_remaining);
+        $('#fppremoteFilePlayerTimeOffset').text(FPPDstatus.TimeOffset);
     }
     else
     {
         $('#FPPRemoteStatus').addClass("hidden")
+    }
+
+    if (Status.input[0].hasOwnProperty('LocalPlayer'))
+    {
+        var LocalPlayerStatus = Status.input[0].LocalPlayer;
+
+        if (LocalPlayerStatus.hasOwnProperty('PlayList'))
+        {
+            $('#LocalPlayListPlayerStatus').removeClass("hidden");
+
+            LocalPlayerStatus = LocalPlayerStatus.PlayList;
+            
+            $('#localPlayListName').text(LocalPlayerStatus.name);
+            $('#localPlayListEntry').text(LocalPlayerStatus.entry);
+            $('#localPlayListCount').text(LocalPlayerStatus.count);
+
+            if (LocalPlayerStatus.hasOwnProperty('File'))
+            {
+                $('#localPlayListRepeat').text(LocalPlayerStatus.repeat);
+            }
+            else
+            {
+                $('#localPlayListRepeat').text("0");
+            }
+        }
+        else
+        {
+            $('#LocalPlayListPlayerStatus').addClass("hidden")
+        }
+
+        if (LocalPlayerStatus.hasOwnProperty('File')) {
+            $('#LocalFilePlayerStatus').removeClass("hidden");
+
+            $('#localFilePlayerFilename').text(LocalPlayerStatus.File.current_sequence);
+            $('#localFilePlayerTimeElapsed').text(LocalPlayerStatus.File.time_elapsed);
+            $('#localFilePlayerTimeRemaining').text(LocalPlayerStatus.File.time_remaining);
+        }
+        else
+        {
+            $('#LocalFilePlayerStatus').addClass("hidden")
+        }
+
+        if (LocalPlayerStatus.hasOwnProperty('Effect'))
+        {
+            $('#LocalEffectPlayerStatus').removeClass("hidden");
+
+            $('#localFilePlayerEffectName').text(LocalPlayerStatus.Effect.currenteffect);
+            $('#localFilePlayerEffectTimeRemaining').text(LocalPlayerStatus.Effect.TimeRemaining);
+        }
+        else
+        {
+            $('#LocalEffectPlayerStatus').addClass("hidden")
+        }
+
+        if (LocalPlayerStatus.hasOwnProperty('Paused')) {
+            $('#PausedPlayerStatus').removeClass("hidden");
+
+            $('#PausedTimeRemaining').text(LocalPlayerStatus.Paused.TimeRemaining);
+        }
+        else {
+            $('#PausedPlayerStatus').addClass("hidden")
+        }
+    }
+    else
+    {
+        $('#LocalPlayListPlayerStatus').addClass("hidden")
+        $('#LocalFilePlayerStatus').addClass("hidden")
+        $('#LocalEffectPlayerStatus').addClass("hidden")
+        $('#PausedPlayerStatus').addClass("hidden")
     }
 
     // Device Refresh is dynamic

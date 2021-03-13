@@ -31,22 +31,24 @@ public:
     c_InputFPPRemotePlayList ();
     ~c_InputFPPRemotePlayList ();
 
-    virtual void Start (String & FileName, uint32_t FrameId);
+    virtual void Start (String & FileName, uint32_t FrameId, uint32_t PlayCount);
     virtual void Stop  ();
-    virtual void Sync  (uint32_t FrameId);
-    virtual void Poll  (uint8_t* Buffer, size_t BufferSize);
+    virtual void Sync  (String & FileName, uint32_t FrameId);
+    virtual void Poll  (uint8_t * Buffer, size_t BufferSize);
     virtual void GetStatus (JsonObject & jsonStatus);
     virtual bool IsIdle () { return (pCurrentFsmState == &fsm_PlayList_state_Idle_imp); }
 
 private:
 
 protected:
+    friend class fsm_PlayList_state_WaitForStart;
     friend class fsm_PlayList_state_Idle;
     friend class fsm_PlayList_state_PlayingFile;
     friend class fsm_PlayList_state_PlayingEffect;
     friend class fsm_PlayList_state_Paused;
     friend class fsm_PlayList_state;
 
+    fsm_PlayList_state_WaitForStart  fsm_PlayList_state_WaitForStart_imp;
     fsm_PlayList_state_Idle          fsm_PlayList_state_Idle_imp;
     fsm_PlayList_state_PlayingFile   fsm_PlayList_state_PlayingFile_imp;
     fsm_PlayList_state_PlayingEffect fsm_PlayList_state_PlayingEffect_imp;
@@ -56,8 +58,9 @@ protected:
 
     c_InputFPPRemotePlayItem * pInputFPPRemotePlayItem = nullptr;
 
-    uint32_t PlayListEntryId;
-    time_t PauseEndTime = 0;
+    uint32_t PlayListEntryId     = 0;
+    time_t   PauseEndTime        = 0;
+    uint32_t PlayListRepeatCount = 1;
 
     bool ProcessPlayListEntry ();
 

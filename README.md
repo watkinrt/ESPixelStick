@@ -37,8 +37,9 @@ Extract the folder in each of these zip files and place it in the "library" fold
 - [async-mqtt-client](https://github.com/marvinroger/async-mqtt-client) - Asynchronous MQTT Client
 - [Int64String](https://github.com/djGrrr/Int64String) - Converts 64 bit integers into a string
 - [EspAlexa](https://github.com/Aircoookie/Espalexa) - Alexa Direct control Library
+- [Adafruit-PWM-Servo-Driver-Library](https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library) - Servo Motor I2C control
 
-The ESP32 build will require the following software to build this project:
+The ESP32 build will require the following software libraries to build this project:
 
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson) - Arduino JSON Library
 - [ESPAsyncE131](https://github.com/forkineye/ESPAsyncE131) - Asynchronous E1.31 (sACN) library
@@ -48,32 +49,56 @@ The ESP32 build will require the following software to build this project:
 - [async-mqtt-client](https://github.com/marvinroger/async-mqtt-client) - Asynchronous MQTT Client
 - [Int64String](https://github.com/djGrrr/Int64String) - Converts 64 bit integers into a string
 - [EspAlexa](https://github.com/Aircoookie/Espalexa) - Alexa Direct control Library
+- [Adafruit-PWM-Servo-Driver-Library](https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library)
 
 Using library manager:
 - Install littlefs-32 for esp32 support.
 ## Important Notes on Compiling and Flashing
 
-- In order to upload your code to the ESP8266 you must put it in flash mode and then take it out of flash mode to run the code. To place your ESP8266 in flash mode your GPIO-0 pin must be connected to ground.
-- Device mode is now a compile time option to set your device type and is configured in the top of the main sketch file.  Current options are ```ESPS_MODE_PIXEL``` and ```ESPS_MODE_SERIAL```.  The default is ```ESPS_MODE_PIXEL``` for the ESPixelStick hardware.
-- Web pages **must** be processed, placed into ```data/www```, and uploaded with the upload plugin. Gulp will process the pages and put them in ```data/www``` for you. Refer to the html [README](html/README.md) for more information.
-- In order to use the upload plugin, the ESP8266 **must** be placed into programming mode and the Arduino serial monitor **must** be closed.
+- In order to upload your code to the ESP you must put it in flash mode and then take it out of flash mode to run the code. To place your ESP8266 in flash mode your GPIO-0 pin must be connected to ground.
+- - Web pages **must** be processed, placed into ```data/www```, and uploaded with the upload plugin. Gulp will process the pages and put them in ```data/www``` for you. Refer to the html [README](html/README.md) for more information.
+- In order to use the upload plugin, the ESP **must** be placed into programming mode and the Arduino serial monitor **must** be closed.
 - ESP-01 modules **must** be configured for 1M flash and 128k File System within the Arduino IDE for OTA updates to work.
-- For best performance, set the CPU frequency to 160MHz (Tools->CPU Frequency).  You may experience lag and other issues if running at 80MHz.
+- For best performance on ESP8266 modules, set the CPU frequency to 160MHz (Tools->CPU Frequency).  You may experience lag and other issues if running at 80MHz.
+- For best performance on ESP32 modules, set the PSRAM option to ENABLED (Tools->CPU Frequency).  You may experience lag and other issues if running at 80MHz.
 - The upload must be redone each time after you rebuild and upload the software
+- it is reccomended that you do a factory reset via the browser admin page after uploading a new version of the software.
+
+### How to build for the ESP32
+
+- install the Arduino IDE and tell it your default workbook folder is ..\Documents\Arduino. 
+- In ...\Documents\Arduino create two sub directories
+- - ...\Documents\Arduino\Libraries
+- - ...\Documents\Arduino\Tools
+- Download / Clone the libraries identified in this readme (above) into sub directories in the ...\Arduino\libraries directory
+- Download the littleFS utility into the Tools directory
+- Clone ESPixelStick-Unify into ...\Documents\Arduino\ESPixelStick
+- Create the ...\Documents\Arduino\ESPixelStick\src\secrets.h file and enter your WiFi ID and WiFi Password as described in WiFiMgr.cpp
+- Connect your LoLin D32 PRO to the computer using a USB cable (not the Serial Port the gets opened)
+- In the ESPixelStick directory double click on the ESPixelStick.ino file
+- In the Arduino IDE click: File->Preferences
+- - Make sure the Sketchbook location is set to point at your Arduino directory (note ESPixelStick dir)
+- Set the following into the "Additional Boards Manager URLs" field:
+- - https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json,https://arduino.esp8266.com/stable/package_esp8266com_index.json
+- Exit the preferences menu
+- Click on "Tools->Board->ESP32->LOLIN D32 PRO
+- Next click on Tools->PSRAM->enabled
+- Set the port on which the LoLin is connected: Tools->port->YourPortNumberGoesHere
+- Click Sketch->Upload - This will build and upload to the LoLin device
 
 ## Supported Inputs 
 
-The configuration has been modified the support multiple (two) input types concurrently. For example you can select E1.31 and Effects at the same time. E1.31 will have higher priority than Effects. Valid input types are:
+The configuration has been modified to support multiple (two) input types concurrently. For example you can select E1.31 and Effects at the same time. E1.31 will have higher priority than Effects. Valid input types are:
 - Alexa
 - DDP
 - E1.31
 - Effect Engine
-- FPP Remote / FSEQ file auto Play
+- FPP Remote / FSEQ file auto Play / Play Lists
 - MQTT
 
 ### Alexa Support
 
-Alexa is supported in direct mode. No additional hubs or applications are needed. When Alexa is selected as an input mode, the ESP will be discoverable by the Alexa app as a device that support 24bit color. The entire output string will be treated (from Alexa's point of view) as a single light bulb 
+Alexa is supported in direct mode. No additional hubs or applications are needed. When Alexa is selected as an input mode, the ESP will be discoverable by the Alexa app as a device that supports 24 bit color. The entire output buffer will be treated (from Alexa's point of view) as a single light bulb 
 
 ### DDP
 
@@ -85,7 +110,7 @@ E1.31 requires additional configuration:
 
 - Starting Universe
 - Channels / universe
-- Offset into the first univers to first channel (Typically zero)
+- Offset into the first universe to first channel (Typically zero)
 
 ### Effect Engine
 
@@ -94,8 +119,92 @@ Effect engine provides a list of effects and colors for the effects. Effects wil
 ### FPP Remote / Play FSEQ
 
 FPP / FSEQ support allows the ESP to play files stored on a local SD card. The configuration allows the SPI pins used for the SD Card to be set. 
-When the "FSEQ File to Play" configuration parameter is set to "Play Remote Sequence", the ESP will respond to FPP Sync and play commands.
-When the "FSEQ File to Play" configuration parameter is set to one of the files stored on the ESP, the ESP will play that file on an endless loop.
+- When the "FSEQ File to Play" configuration parameter is set to "Play Remote Sequence", the ESP will respond to FPP Sync and play commands.
+- When the "FSEQ File to Play" configuration parameter is set to one of the files stored on the ESP, the ESP will play that file on an endless loop.
+- When the "FSEQ File To Play" configuration parameter is set to a file with a .pl extension, the file will be parsed and used to control a set of actions performed by the FPP Play List Player.
+
+#### Play List
+The ESPixelstick can follow a set of instructions found in a play list file. A playlist file can have any name and up to 20 actions to take. Play List actions are one of the following:
+- Play a file (must be an fseq file)
+	- Requires the Filename and the number of times to play the file (max 255)
+- Play an effect (Effect list can be found in the Effect configuration dropdown)
+	- Requires an effect configuration that includes how long to play the effect (max 1000 seconds)
+- Pause
+	- Requires a time value (up to 1000 seconds)
+- The play list file is case sensitive. 
+- The effect configuration sections must be present for the effects to function properly.
+
+Here is an example of a Play List File:
+```
+[
+	{
+		"type": "file",
+		"name": "MySequence.fseq",
+		"playcount": 2
+	},
+	{
+		"type": "pause",
+		"duration": 5
+	},
+	{
+		"type": "effect",
+		"duration": 10,
+		"config": 
+		{
+			"currenteffect": "Chase",
+			"EffectSpeed": 6,
+			"EffectReverse": false,
+			"EffectMirror": false,
+			"EffectAllLeds": false,
+			"EffectBrightness": 1,
+			"EffectBlankTime": 0,
+			"EffectWhiteChannel": false,
+			"EffectColor": "#0000ff"
+		}
+	},
+	{
+		"type": "effect",
+		"duration": 5,
+		"config": 
+		{
+			"currenteffect": "Rainbow",
+			"EffectSpeed": 6,
+			"EffectReverse": false,
+			"EffectMirror": false,
+			"EffectAllLeds": false,
+			"EffectBrightness": 1,
+			"EffectBlankTime": 0,
+			"EffectWhiteChannel": false,
+			"EffectColor": "#b700ff"
+		}
+	},
+	{
+		"type": "effect",
+		"duration": 10,
+		"config": 
+		{
+			"currenteffect": "Blink",
+			"EffectSpeed": 6,
+			"EffectReverse": false,
+			"EffectMirror": false,
+			"EffectAllLeds": false,
+			"EffectBrightness": 1,
+			"EffectBlankTime": 0,
+			"EffectWhiteChannel": false,
+			"EffectColor": "#FF0055"
+		}
+	},
+	{
+		"type": "file",
+		"name": "MyOtherSequence.fseq",
+		"playcount": 1
+	},
+	{
+		"type": "pause",
+		"duration": 5
+	}
+]
+```
 
 ### MQTT Support
 
@@ -124,12 +233,31 @@ light:
       - Fire flicker
       - Lightning
       - Breathe
+      - playFseq
+```
+
+Here is an example of playing an fseq file via mqtt
+
+```yaml
+light:
+  - platform: mqtt
+    schema: json
+    name: "Porch ESPixelStick"
+    state_topic: "porch/esps"
+    command_topic: "porch/esps/set"
+    effect: playFseq
+    filename: NameOfFileToPlay
+    count: 5
 ```
 
 Here's an example using the mosquitto_pub command line tool:
 
 ```bash
 mosquitto_pub -t porch/esps/set -m '{"state":"ON","color":{"r":255,"g":128,"b":64},"brightness":255,"effect":"solid","reverse":false,"mirror":false}'
+```
+An example of playing a file three times.
+```bash
+mosquitto_pub -t porch/esps/set -m '{"state":"ON","brightness":255,"effect":"playFseq","filename":"ESPTuneToTest.fseq","count":3}'
 ```
 
 ### Additional Input Features
@@ -139,21 +267,39 @@ The input channels will respond to FPP and xLights discovery requests. xLights a
 ## Supported Outputs
 
 The ESPixelStick firmware can generate the following outputs from incoming data streams, however your hardware must support the physical interface. 
-ESP8266 platforms support a single output
-ESP32 platforms support two outputs
+ESP8266-12F platforms support:
+- a single serial / Pixel output
+- 8 Relay Outputs
+- 16 PWM Outputs (I2C bus)
 
-Each output can be configured to support any of the output protocols (no pixel vs serial image).
+ESP32 platforms support
+- two serial / pixel outputs
+- 8 Relay outputs
+- 16 PWM Outputs (I2C bus)
+
+Each Serial / Pixel output can be configured to support any of the output protocols (no pixel vs serial image).
 
 ### Pixel Protocols
 
-- WS2811 / WS2812 / WS2812b
+- WS2811 / WS2812 / WS2812b (WS281x)
 - GE Color Effects
 
 ### Serial Protocols
 
-- DMX512
+- DMX 512
 - Renard
 - Generic Serial
+
+### Relay Outputs
+We support an output configuration that drives up to eight (8) relay outputs. 
+- Each relay output can be configured to be active high or active low. 
+- The channel intensity trip point (on/off) is configurable per output.
+- The GPIO for each output is configurable
+
+### PWM Outputs
+We support up to 16 PWM outputs via the I2C bus. Each output can be configured to map the 8 bit channel intensity values to 4096 PWM timings.
+PWM is supported via the PCM9685 16 channel PWM output module. 
+This CAN be used to drive DC SSRs to support upto 5 dumb RGB light strings.
 
 ## Resources
 
@@ -170,4 +316,4 @@ Each output can be configured to support any of the output protocols (no pixel v
   - penfold42 also maintains PWM support in their fork located [here](https://github.com/penfold42/ESPixelBoard).
 - [Austin Hodges](https://github.com/ahodges9) for effects support and MQTT cleanup.
 - [Matthias C. Hormann](https://github.com/Moonbase59) — some MQTT & effects cleanup.
-- [Martin Mueller](https://github.com/MartinMueller2003) — Port to ESP32. Clean up the unify branch.
+- [Martin Mueller](https://github.com/MartinMueller2003) — Port to ESP32. Clean up the unify branch. Added Alexa, Play FIle, Relay and native PWM supprt.
