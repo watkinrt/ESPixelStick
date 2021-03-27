@@ -35,7 +35,7 @@ GNU General Public License for more details.
 #define Relay_OUTPUT_INVERTED        true
 #define Relay_OUTPUT_NOT_INVERTED    false
 #define Relay_DEFAULT_TRIGGER_LEVEL  128
-#define Relay_DEFAULT_GPIO_ID        ((gpio_num_t)-1) 
+#define Relay_DEFAULT_GPIO_ID        ((gpio_num_t)0) 
 
 static const c_OutputRelay::RelayChannel_t RelayChannelDefaultSettings[] =
 {
@@ -128,7 +128,6 @@ bool c_OutputRelay::validate ()
     }
 
     SetOutputBufferSize (Num_Channels);
-    uint8_t CurrentRelayChanIndex = 0;
     for (RelayChannel_t & currentRelay : OutputList)
     {
         if (currentRelay.GpioId == Relay_DEFAULT_GPIO_ID)
@@ -318,6 +317,7 @@ void c_OutputRelay::Render ()
         }
         ++OutputDataIndex;
     }
+    ReportNewFrame ();
 
     // DEBUG_END;
 } // render
