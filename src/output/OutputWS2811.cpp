@@ -185,8 +185,8 @@ void c_OutputWS2811::GetConfig(ArduinoJson::JsonObject & jsonConfig)
     jsonConfig[CN_gamma]          = gamma;
     jsonConfig[CN_brightness]     = uint8_t(brightness * 100.0); // save as a 1 - 100 percentage
     jsonConfig[CN_interframetime] = InterFrameGapInMicroSec;
-    // enums need to be converted to uints for json
-    jsonConfig[CN_data_pin]       = uint (DataPin);
+
+    c_OutputCommon::GetConfig (jsonConfig);
 
     // DEBUG_END;
 } // GetConfig
@@ -251,7 +251,7 @@ void c_OutputWS2811::SetOutputBufferSize (uint16_t NumChannelsAvailable)
             // DEBUG_V ("malloc failed");
             LOG_PORT.println ("ERROR: WS2811 driver failed to allocate an IsrOutputBuffer. Shutting down output.");
             c_OutputCommon::SetOutputBufferSize ((uint16_t)0);
-            FrameRefreshTimeInMicroSec = InterFrameGapInMicroSec;
+            FrameMinDurationInMicroSec = InterFrameGapInMicroSec;
             break;
         }
 
@@ -259,7 +259,7 @@ void c_OutputWS2811::SetOutputBufferSize (uint16_t NumChannelsAvailable)
 
         memset (pIsrOutputBuffer, 0x0, NumChannelsAvailable);
         // Calculate our refresh time
-        FrameRefreshTimeInMicroSec = (WS2811_MICRO_SEC_PER_INTENSITY * NumChannelsAvailable) + InterFrameGapInMicroSec;
+        FrameMinDurationInMicroSec = (WS2811_MICRO_SEC_PER_INTENSITY * NumChannelsAvailable) + InterFrameGapInMicroSec;
 
     } while (false);
 
@@ -278,7 +278,7 @@ void IRAM_ATTR c_OutputWS2811::ISR_Handler ()
         // Fill the FIFO with new data
         // free space in the FIFO divided by the number of data bytes per intensity
         // gives the max number of intensities we can add to the FIFO
-        uint16_t IntensitySpaceInFifo = (((uint16_t)UART_TX_FIFO_SIZE) - (getWS2811FifoLength)) / WS2812_NUM_DATA_BYTES_PER_INTENSITY_BYTE;
+        uint16_t IntensitySpaceInFifo = (((uint16_t)UART_TX_FIFO_SIZE) - (getFifoLength)) / WS2812_NUM_DATA_BYTES_PER_INTENSITY_BYTE;
 
         // determine how many intensities we can process right now.
         uint16_t IntensitiesToSend = (IntensitySpaceInFifo < RemainingIntensityCount) ? (IntensitySpaceInFifo) : RemainingIntensityCount;
@@ -325,9 +325,9 @@ void c_OutputWS2811::Render()
     // DEBUG_V (String ("RemainingIntensityCount: ") + RemainingIntensityCount)
 
     if (gpio_num_t (-1) == DataPin) { return; }
-    // if (!canRefresh ()) { return; }
-    if (0 != RemainingIntensityCount) { return; }
     if (nullptr == pIsrOutputBuffer) { return; }
+    if (0 != RemainingIntensityCount) { return; }
+    if (!canRefresh ()) { return; }
 
     // set up pointers into the pixel data space
     uint8_t *pSourceData = pOutputBuffer; // source buffer (owned by base class)
@@ -401,7 +401,7 @@ void c_OutputWS2811::Render()
 //     (*((volatile uint32_t*)(UART_FIFO_AHB_REG (UART_NUM_0)))) = (uint32_t)('7');
     ESP_ERROR_CHECK (uart_enable_tx_intr (UartId, 1, PIXEL_FIFO_TRIGGER_LEVEL));
 #endif
-    FrameStartTimeInMicroSec = micros();
+
     ReportNewFrame ();
 
     // DEBUG_END;
@@ -422,8 +422,6 @@ bool c_OutputWS2811::SetConfig (ArduinoJson::JsonObject & jsonConfig)
     // DEBUG_START;
 
     // enums need to be converted to uints for json
-    uint tempDataPin = uint (DataPin);
-
     setFromJSON (color_order,             jsonConfig, CN_color_order);
     setFromJSON (pixel_count,             jsonConfig, CN_pixel_count);
     setFromJSON (group_size,              jsonConfig, CN_group_size);
@@ -431,8 +429,8 @@ bool c_OutputWS2811::SetConfig (ArduinoJson::JsonObject & jsonConfig)
     setFromJSON (gamma,                   jsonConfig, CN_gamma);
     setFromJSON (brightness,              jsonConfig, CN_brightness);
     setFromJSON (InterFrameGapInMicroSec, jsonConfig, CN_interframetime);
-    setFromJSON (tempDataPin,             jsonConfig, CN_data_pin);
-    DataPin = gpio_num_t (tempDataPin);
+
+    c_OutputCommon::SetConfig (jsonConfig);
 
     // DEBUG_V (String ("brightness: ") + String (brightness));
     brightness /= 100.0; // turn into a 0-1.0 multiplier
@@ -547,4 +545,3 @@ bool c_OutputWS2811::validate ()
     return response;
 
 } // validate
-

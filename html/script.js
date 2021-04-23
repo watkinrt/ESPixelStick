@@ -90,15 +90,11 @@ $(function ()
         submitWiFiConfig();
     });
 
-    $('#btn_RGB').change(function () {
+    $('#viewStyle').change(function () {
         clearStream();
     });
 
-    $('#btn_RGBW').change(function () {
-        clearStream();
-    });
-
-    $('#btn_Channel').change(function () {
+    $('#v_columns').on('input', function () {
         clearStream();
     });
 
@@ -108,6 +104,10 @@ $(function ()
 
     $('#adminFactoryReset').click(function () {
         factoryReset();
+    });
+
+    $('#AdvancedOptions').change(function () {
+        UpdateAdvancedOptionsMode();
     });
 
     var finalUrl = "http://" + target + "/upload";
@@ -169,6 +169,27 @@ $(function ()
     RequestStatusUpdate();
 });
 
+function UpdateAdvancedOptionsMode()
+{
+    console.info("UpdateAdvancedOptionsMode");
+
+    var am = $('#AdvancedOptions');
+    var AdvancedModeState = am.prop("checked");
+
+    $(".AdvancedMode").each(function ()
+    {
+        if (true === AdvancedModeState)
+        {
+            $(this).removeClass("hidden");
+        }
+        else
+        {
+            $(this).addClass("hidden");
+        }
+    });
+
+} // UpdateAdvancedOptionsMode
+
 function ProcessWindowChange(NextWindow) {
 
     if (NextWindow === "#diag") {
@@ -190,6 +211,7 @@ function ProcessWindowChange(NextWindow) {
         wsEnqueue(JSON.stringify({ 'cmd': { 'get': 'input' } }));  // Get input config
     }
 
+    UpdateAdvancedOptionsMode();
     RequestListOfFiles();
 
 } // ProcessWindowChange
@@ -524,6 +546,8 @@ function ProcessModeConfigurationData(channelId, ChannelType, JsonConfig )
         ProcessModeConfigurationDataServoPCA9685(channelConfig);
     }
 
+    UpdateAdvancedOptionsMode();
+
     // console.info("ProcessModeConfigurationData: End");
 
 } // ProcessModeConfigurationData
@@ -697,7 +721,7 @@ function CreateOptionsFromConfig(OptionListName, Config)
         {
             // create the selection box
             $('#fg_' + OptionListName).append('<label class="control-label col-sm-2" for="' + OptionListName + ChannelId + '">' + GenerateInputOutputControlName(OptionListName, ChannelId) + ' Mode</label>');
-            $('#fg_' + OptionListName).append('<div class="col-sm-4"><select class="form-control wsopt" id="' + OptionListName + ChannelId + '"></select></div>');
+            $('#fg_' + OptionListName).append('<div class="col-sm-2"><select class="form-control wsopt" id="' + OptionListName + ChannelId + '"></select></div>');
             $('#fg_' + OptionListName + '_mode').append('<fieldset id="' + OptionListName + 'mode' + ChannelId + '"></fieldset>');
         }
 

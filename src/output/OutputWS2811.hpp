@@ -79,36 +79,12 @@ private:
 
     // Internal variables
     uint8_t        *pIsrOutputBuffer = nullptr;         ///< Data ready to be sent to the UART
-    uint8_t        *pNextIntensityToSend;               ///< start of output buffer being sent to the UART
-    uint16_t        RemainingIntensityCount;            ///< Used by ISR to determine how much more data to send
+    uint8_t        *pNextIntensityToSend = nullptr;     ///< start of output buffer being sent to the UART
+    uint16_t        RemainingIntensityCount = 0;        ///< Used by ISR to determine how much more data to send
     uint8_t         numIntensityBytesPerPixel = 3;      ///< number of bytes per pixel
     uint8_t         gamma_table[256] = { 0 };           ///< Gamma Adjustment table
     ColorOffsets_t  ColorOffsets;
-    uint16_t        InterFrameGapInMicroSec;
-
-#ifdef ARDUINO_ARCH_ESP8266
-    /* Returns number of bytes waiting in the TX FIFO of UART1 */
- #  define getWS2811FifoLength ((uint16_t)((U1S >> USTXC) & 0xff))
-
-    /* Append a byte to the TX FIFO of UART1 */
- #  define enqueue(data)  (U1F = (char)(data))
-
-#elif defined(ARDUINO_ARCH_ESP32)
-
-    /* Returns number of bytes waiting in the TX FIFO of UART1 */
-#   define getWS2811FifoLength ((uint16_t)((READ_PERI_REG (UART_STATUS_REG (UartId)) & UART_TXFIFO_CNT_M) >> UART_TXFIFO_CNT_S))
-// #   define getFifoLength 80
-
-    /* Append a byte to the TX FIFO of UART1 */
-// #   define enqueue(value) WRITE_PERI_REG(UART_FIFO_AHB_REG (UART), (char)(value))
-#	define enqueue(value) (*((volatile uint32_t*)(UART_FIFO_AHB_REG (UartId)))) = (uint32_t)(value)
-
-#endif
-
-    inline boolean canRefresh()
-    {
-        return (micros() - FrameStartTimeInMicroSec) >= FrameRefreshTimeInMicroSec;
-    }
+    uint16_t        InterFrameGapInMicroSec = 0;
 
     void updateGammaTable(); ///< Generate gamma correction table
     void updateColorOrderOffsets(); ///< Update color order
