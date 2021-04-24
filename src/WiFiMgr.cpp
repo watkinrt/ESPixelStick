@@ -889,6 +889,8 @@ void fsm_WiFi_state_ConnectedToEth::Init ()
 
     WiFiMgr.SetIsEthConnected (true);
     InputMgr.NetworkStateChanged (true);
+    WebMgr.NetworkStateChanged (true);
+    FPPDiscovery.NetworkStateChanged (true);
 #endif
     // DEBUG_END;
 } // fsm_WiFi_state_ConnectedToEth::Init
