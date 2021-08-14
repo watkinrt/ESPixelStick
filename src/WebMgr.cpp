@@ -99,7 +99,7 @@ void c_WebMgr::Begin (config_t* /* NewConfig */)
 {
     // DEBUG_START;
 
-    if (WiFiMgr.IsWiFiConnected ())
+    if (WiFiMgr.IsConnected ())
     {
         init ();
     }
