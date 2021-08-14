@@ -32,6 +32,7 @@
 #include "InputAlexa.h"
 #include "InputDDP.h"
 #include "InputFPPRemote.h"
+#include "InputArtnet.hpp"
 // needs to be last
 #include "InputMgr.hpp"
 
@@ -52,6 +53,7 @@ static const InputTypeXlateMap_t InputTypeXlateMap[c_InputMgr::e_InputType::Inpu
     {c_InputMgr::e_InputType::InputType_E1_31,    "E1.31",      c_InputMgr::e_InputChannelIds::InputChannelId_1},
     {c_InputMgr::e_InputType::InputType_DDP,      "DDP",        c_InputMgr::e_InputChannelIds::InputChannelId_1},
     {c_InputMgr::e_InputType::InputType_FPP,      "FPP Remote", c_InputMgr::e_InputChannelIds::InputChannelId_1},
+    {c_InputMgr::e_InputType::InputType_Artnet,   "Artnet",     c_InputMgr::e_InputChannelIds::InputChannelId_1},
     {c_InputMgr::e_InputType::InputType_Effects,  "Effects",    c_InputMgr::e_InputChannelIds::InputChannelId_2},
     {c_InputMgr::e_InputType::InputType_MQTT,     "MQTT",       c_InputMgr::e_InputChannelIds::InputChannelId_2},
     {c_InputMgr::e_InputType::InputType_Alexa,    "Alexa",      c_InputMgr::e_InputChannelIds::InputChannelId_2},
@@ -113,7 +115,7 @@ void c_InputMgr::Begin (uint8_t* BufferStart, uint16_t BufferSize)
     if (true == HasBeenInitialized) { return; }
     HasBeenInitialized = true;
 
-    String temp = String ("Effects Control");
+    String temp = String (F("Effects Control"));
     ExternalInput.Init (0,0, c_ExternalInput::Polarity_t::ActiveLow, temp);
 
     // make sure the pointers are set up properly
@@ -283,12 +285,9 @@ void c_InputMgr::CreateNewConfig ()
     // Record the default configuration
     CreateJsonConfig (JsonConfig);
 
-    ConfigData.clear ();
+    String ConfigData;
     serializeJson (JsonConfigDoc, ConfigData);
-    ConfigSaveNeeded = false;
-    SaveConfig ();
-
-    JsonConfigDoc.garbageCollect ();
+    SetConfig (ConfigData.c_str());
 
     LOG_PORT.println (F ("--- WARNING: Creating a new Input Manager configuration Data set - Done ---"));
     // DEBUG_END;
@@ -296,24 +295,12 @@ void c_InputMgr::CreateNewConfig ()
 } // CreateNewConfig
 
 //-----------------------------------------------------------------------------
-void c_InputMgr::GetConfig (char* Response)
+void c_InputMgr::GetConfig (byte * Response, size_t maxlen)
 {
     // DEBUGSTART;
 
-    // is a new config waiting to be saved?
-    if (0 != ConfigData.length ())
-    {
-        // DEBUGV (String ("ConfigData: ") + ConfigData);
-        // use the pending config
-        strcat (Response, ConfigData.c_str ());
-    }
-    else
-    {
-        String TempConfigData;
-        FileMgr.ReadConfigFile (ConfigFileName, TempConfigData);
-        // DEBUGV (String ("TempConfigData: ") + TempConfigData);
-        strcat (Response, TempConfigData.c_str ());
-    }
+    FileMgr.ReadConfigFile (ConfigFileName, Response, maxlen);
+    // DEBUGV (String ("TempConfigData: ") + TempConfigData);
 
     // DEBUGEND;
 } // GetConfig
@@ -513,8 +500,23 @@ void c_InputMgr::InstantiateNewInputChannel (e_InputChannelIds ChannelIndex, e_I
             {
                 if (InputTypeIsAllowedOnChannel (InputType_FPP, ChannelIndex))
                 {
-                    // LOG_PORT.println (String (F ("************** Starting DDP for channel '")) + ChannelIndex + "'. **************");
+                    // LOG_PORT.println (String (F ("************** Starting FPP for channel '")) + ChannelIndex + "'. **************");
                     pInputChannelDrivers[ChannelIndex] = new c_InputFPPRemote (ChannelIndex, InputType_FPP, InputDataBuffer, InputDataBufferSize);
+                    // DEBUG_V ("");
+                }
+                else
+                {
+                    pInputChannelDrivers[ChannelIndex] = new c_InputDisabled (ChannelIndex, InputType_Disabled, InputDataBuffer, InputDataBufferSize);
+                }
+                break;
+            }
+
+            case e_InputType::InputType_Artnet:
+            {
+                if (InputTypeIsAllowedOnChannel (InputType_Artnet, ChannelIndex))
+                {
+                    // LOG_PORT.println (String (F ("************** Starting Artnet for channel '")) + ChannelIndex + "'. **************");
+                    pInputChannelDrivers[ChannelIndex] = new c_InputArtnet (ChannelIndex, InputType_Artnet, InputDataBuffer, InputDataBufferSize);
                     // DEBUG_V ("");
                 }
                 else
@@ -586,35 +588,41 @@ void c_InputMgr::Process ()
     // DEBUG_START;
     // do we need to save the current config?
 
-    ExternalInput.Poll ();
-    ProcessEffectsButtonActions ();
-
-    if (true == ConfigSaveNeeded)
+    do // once
     {
-        // DEBUG_V ("ConfigData: " + ConfigData);
+        if (configInProgress)
+        {
+            // prevent calls to process when we are doing a long operation
+            break;
+        }
 
-        // DEBUG_V ("Start Save Config");
+        ExternalInput.Poll ();
+        ProcessEffectsButtonActions ();
 
-        ConfigSaveNeeded = false;
-        SaveConfig ();
-        // DEBUG_V ("Reload the config");
-        LoadConfig ();
-        // DEBUG_V ("End Save Config");
+        if (true == configLoadNeeded)
+        {
+            configLoadNeeded = false;
+            configInProgress = true;
+            // DEBUG_V ("Reload the config");
+            LoadConfig ();
+            // DEBUG_V ("End Save Config");
+            configInProgress = false;
+        }
 
-    } // done need to save the current config
-
-    // DEBUG_V("");
-    for (c_InputCommon* pInputChannel : pInputChannelDrivers)
-    {
-        pInputChannel->Process ();
         // DEBUG_V("");
-    }
+        for (c_InputCommon* pInputChannel : pInputChannelDrivers)
+        {
+            pInputChannel->Process ();
+            // DEBUG_V("");
+        }
 
-    if (rebootNeeded)
-    {
-        // DEBUG_V("Requesting Reboot");
-        reboot = true;
-    }
+        if (rebootNeeded)
+        {
+            // DEBUG_V("Requesting Reboot");
+            reboot = true;
+        }
+
+    } while (false);
 
     // DEBUG_END;
 } // Process
@@ -694,6 +702,8 @@ bool c_InputMgr::ProcessJsonConfig (JsonObject & jsonConfig)
         if (false == jsonConfig.containsKey (CN_input_config))
         {
             LOG_PORT.println (F ("No Input Interface Settings Found. Using Defaults"));
+            extern void PrettyPrint (JsonObject & jsonStuff, String Name);
+            PrettyPrint (jsonConfig, String(F ("c_InputMgr::ProcessJsonConfig")));
             break;
         }
         JsonObject InputChannelMgrData = jsonConfig[CN_input_config];
@@ -809,25 +819,26 @@ bool c_InputMgr::ProcessJsonConfig (JsonObject & jsonConfig)
 } // ProcessJsonConfig
 
 //-----------------------------------------------------------------------------
-/*
-*   Save the current configuration to NVRAM
+/* Sets the configuration for the current active ports:
 *
-*   needs
-*       Nothing
-*   returns
-*       Nothing
+*   WARNING: This runs in the Web server context and cannot access the File system
+*
+*   Needs
+*       Reference to the incoming JSON configuration doc
+*   Returns
+*       nothing
 */
-void c_InputMgr::SaveConfig ()
+void c_InputMgr::SetConfig (const char * NewConfigData)
 {
     // DEBUG_START;
 
-    // DEBUGV (String("ConfigData: ") + ConfigData);
-
-    if (true == FileMgr.SaveConfigFile (ConfigFileName, ConfigData))
+    if (true == FileMgr.SaveConfigFile (ConfigFileName, NewConfigData))
     {
+        // DEBUG_V (String("NewConfigData: ") + NewConfigData);
         LOG_PORT.println (F ("**** Saved Input Manager Config File. ****"));
-        // DEBUG_V ("ConfigData: " + ConfigData);
-        ConfigData.clear ();
+
+        configLoadNeeded = true;
+
     } // end we saved the config
     else
     {
@@ -836,41 +847,6 @@ void c_InputMgr::SaveConfig ()
 
     // DEBUG_END;
 
-} // SaveConfig
-
-//-----------------------------------------------------------------------------
-/* Sets the configuration for the current active ports:
-*
-*   WARNING: This runs in the Web server context and cannot access the File system
-*
-*   Needs
-*       Reference to the incoming JSON configuration doc
-*   Returns
-*       true - No Errors found
-*       false - Had an issue and it was reported to the log interface
-*/
-bool c_InputMgr::SetConfig (JsonObject & jsonConfig)
-{
-    // DEBUG_START;
-    boolean Response = false;
-
-    if (jsonConfig.containsKey (CN_input_config))
-    {
-        // DEBUG_V ("");
-
-        // schedule a future save of the config file
-        serializeJson (jsonConfig, ConfigData);
-        // DEBUG_V ("Request Config Save");
-        ConfigSaveNeeded = true;
-    }
-    else
-    {
-        LOG_PORT.println (F ("EEEE No Input Manager settings found in new config. EEEE"));
-    }
-
-    // DEBUG_END;
-
-    return Response;
 } // SetConfig
 
 //-----------------------------------------------------------------------------

@@ -40,10 +40,12 @@ public:
 
     typedef uint32_t FileId;
 
-    void   Begin            ();
-    void   Poll             ();
-    void   SetSpiIoPins     (uint8_t miso, uint8_t mosi, uint8_t clock, uint8_t cs);
-    void   handleFileUpload (const String & filename, size_t index, uint8_t * data, size_t len, bool final);
+    void    Begin     ();
+    void    Poll      ();
+    void    GetConfig (JsonObject& json);
+    boolean SetConfig (JsonObject& json);
+
+    void    handleFileUpload (const String & filename, size_t index, uint8_t * data, size_t len, bool final);
 
     typedef std::function<void (DynamicJsonDocument& json)> DeserializationHandler;
 
@@ -55,14 +57,16 @@ public:
     } FileMode;
 
     void   DeleteConfigFile (const String & FileName);
-    bool   SaveConfigFile   (const String & FileName,   String & FileData);
-    bool   SaveConfigFile   (const String & FileName,   JsonVariant & FileData);
-    bool   ReadConfigFile   (const String & FileName,   String & FileData);
-    bool   ReadConfigFile   (const String & FileName,   JsonDocument & FileData);
-    bool   LoadConfigFile   (const String & FileName,   DeserializationHandler Handler);
+    bool   SaveConfigFile   (const String & FileName, String & FileData);
+    bool   SaveConfigFile   (const String & FileName, const char * FileData);
+    bool   SaveConfigFile   (const String & FileName, JsonVariant & FileData);
+    bool   ReadConfigFile   (const String & FileName, String & FileData);
+    bool   ReadConfigFile   (const String & FileName, JsonDocument & FileData);
+    bool   ReadConfigFile   (const String & FileName, byte * FileData, size_t maxlen);
+    bool   LoadConfigFile   (const String & FileName, DeserializationHandler Handler);
 
     bool   SdCardIsInstalled () { return SdCardInstalled; }
-    FileId CreateFileHandle ();
+    FileId CreateSdFileHandle ();
     void   DeleteSdFile     (const String & FileName);
     void   SaveSdFile       (const String & FileName,   String & FileData);
     void   SaveSdFile       (const String & FileName,   JsonVariant & FileData);
@@ -83,26 +87,27 @@ public:
 #   // define CONFIG_MAX_SIZE (4*1024)    ///< Sanity limit for config file
 #endif
 private:
+    void   SetSpiIoPins ();
 
-#ifndef SD_CARD_MISO_PIN
-#   define SD_CARD_MISO_PIN    19
-#endif
-#ifndef SD_CARD_MOSI_PIN
-#   define SD_CARD_MOSI_PIN    23
-#endif
-#ifndef SD_CARD_CLK_PIN
-#   define SD_CARD_CLK_PIN     18
-#endif
+// #ifndef SD_CARD_MISO_PIN
+// #   define SD_CARD_MISO_PIN    19
+// #endif
+// #ifndef SD_CARD_MOSI_PIN
+// #   define SD_CARD_MOSI_PIN    23
+// #endif
+// #ifndef SD_CARD_CLK_PIN
+// #   define SD_CARD_CLK_PIN     18
+// #endif
 
-#   define SD_CARD_CLK_MHZ     SD_SCK_MHZ(50)  // 50 MHz SPI clock
+// #   define SD_CARD_CLK_MHZ     SD_SCK_MHZ(50)  // 50 MHz SPI clock
 
-#ifdef ARDUINO_ARCH_ESP32
-#   ifndef SD_CARD_CS_PIN
-#       define SD_CARD_CS_PIN      4
-#   endif
-#else
-#   define SD_CARD_CS_PIN      15
-#endif
+// #ifdef ARDUINO_ARCH_ESP32
+// #   ifndef SD_CARD_CS_PIN
+// #       define SD_CARD_CS_PIN      4
+// #   endif
+// #else
+// #   define SD_CARD_CS_PIN      15
+// #endif
 
     void listDir (fs::FS& fs, String dirname, uint8_t levels);
     void DescribeSdCardToUser ();
@@ -124,7 +129,19 @@ private:
     bool     fsUploadFileSavedIsEnabled = false;
     char     XlateFileMode[3] = { 'r', 'w', 'w' };
 
-    std::map<FileId, File> FileList;
+#define MaxOpenFiles 5
+    struct FileListEntry_t
+    {
+        FileId handle;
+        File   info;
+        int    entryId;
+    };
+    FileListEntry_t FileList[MaxOpenFiles];
+    int FileListFindSdFileHandle (FileId HandleToFind);
+    void InitSdFileList ();
+
+    byte   * FileUploadBuffer = nullptr;
+    uint32_t FileUploadBufferOffset = 0;
 
 protected:
 

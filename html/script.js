@@ -9,6 +9,7 @@ var ws = null; // Web Socket
 // global data
 var ParsedJsonStatus = null;
 var ParsedJsonConfig = null;
+var AdminInfo = null;
 var Output_Config = null; // Output Manager configuration record
 var Input_Config = null; // Input Manager configuration record
 var Device_Config = null;
@@ -19,6 +20,7 @@ var StatusUpdateRequestTimer = null;
 var target = null;
 var myDropzone = null;
 var SdCardIsInstalled = false;
+var FseqFileTransferStartTime = new Date();
 
 // Drawing canvas - move to diagnostics
 var canvas = document.getElementById("canvas");
@@ -56,8 +58,42 @@ $(function ()
         // Firmware selection and upload
         $('#efu').change(function ()
         {
-            $('#updatefw').submit();
-            $('#update').modal();
+            var file = _('efu').files[0];
+            var formdata = new FormData();
+            formdata.append("file", file);
+            var FileXfer = new XMLHttpRequest();
+
+            FileXfer.upload.addEventListener("progress", progressHandler, false);
+            FileXfer.addEventListener("load", completeHandler, false);
+            FileXfer.addEventListener("error", errorHandler, false);
+            FileXfer.addEventListener("abort", abortHandler, false);
+            FileXfer.open("POST", "http://" + target + "/updatefw");
+            FileXfer.send(formdata);
+            $("#EfuProgressBar").removeClass("hidden");
+
+            function _(el) {
+                return document.getElementById(el);
+            }
+            function progressHandler(event) {
+                var percent = (event.loaded / event.total) * 100;
+                _("EfuProgressBar").value = Math.round(percent);
+            }
+
+            function completeHandler(event) {
+                // _("status").innerHTML = event.target.responseText;
+                _("EfuProgressBar").value = 0; //will clear progress bar after successful upload
+                showReboot();
+            }
+
+            function errorHandler(event) {
+                console.error("Transfer Error");
+                // _("status").innerHTML = "Upload Failed";
+            }
+
+            function abortHandler(event) {
+                console.error("Transfer Abort");
+                // _("status").innerHTML = "Upload Aborted";
+            }
         });
     });
 
@@ -98,6 +134,34 @@ $(function ()
         clearStream();
     });
 
+    $('#backupconfig').click(function ()
+    {
+        ExtractNetworkConfigFromHtmlPage();
+        ExtractChannelConfigFromHtmlPage(Input_Config.channels, "input");
+        ExtractChannelConfigFromHtmlPage(Output_Config.channels, "output");
+        Device_Config.id = $('#config #device #id').val();
+
+        var TotalConfig = JSON.stringify({ 'device': Device_Config, 'network': Network_Config, 'input': Input_Config, 'output': Output_Config });
+
+        var blob = new Blob([TotalConfig], { type: "text/json;charset=utf-8" });
+        var FileName = Device_Config.id.replace(".", "-").replace(" ", "-").replace(",", "-") + "-" + AdminInfo.flashchipid;
+        saveAs(blob, FileName + ".json");
+    });
+
+    $('#restoreconfig').change(function ()
+    {
+        if (this.files.length !== 0)
+        {
+            const reader = new FileReader();
+            reader.onload = function fileReadCompleted()
+            {
+                // when the reader is done, the content is in reader.result.
+                ProcessLocalConfig(reader.result);
+            };
+            reader.readAsText(this.files[0]);
+        }
+    });
+
     $('#adminReboot').click(function () {
         reboot();
     });
@@ -124,11 +188,10 @@ $(function ()
         createImageThumbnails: false,
         dictDefaultMessage: 'Drag an image here to upload, or click to select one',
         acceptedFiles: '.fseq,.pl',
-        timeout: 999999, /*milliseconds*/
+        timeout: 99999999, /*milliseconds*/
         init: function ()
         {
-            this.on('success', function (file, resp)
-            {
+            this.on('success', function (file, resp) {
                 // console.log("Success");
                 // console.log(file);
                 // console.log(resp);
@@ -136,13 +199,36 @@ $(function ()
                 RequestListOfFiles();
             });
 
+            this.on('complete', function (file, resp) {
+                // console.log("complete");
+                // console.log(file);
+                // console.log(resp);
+                $('#fseqprogress_fg').addClass("hidden");
+
+                var DeltaTime = (new Date().getTime() - FseqFileTransferStartTime.getTime()) / 1000;
+                var rate = Math.floor((file.size / DeltaTime) / 1000);
+                console.info("Final Transfer Rate: " + rate + "KBps");
+            });
+
             this.on('addedfile', function (file, resp)
             {
                 // console.log("addedfile");
                 // console.log(file);
                 // console.log(resp);
+                FseqFileTransferStartTime = new Date();
             });
 
+            this.on('uploadprogress', function (file, percentProgress, bytesSent) {
+                // console.log("percentProgress: " + percentProgress);
+                // console.log("bytesSent: " + bytesSent);
+                $('#fseqprogress_fg').removeClass("hidden");
+                $('#fseqprogressbytes').html(bytesSent);
+
+                var now = new Date().getTime();
+                var DeltaTime = (now - FseqFileTransferStartTime.getTime()) / 1000;
+                var rate = Math.floor((bytesSent / DeltaTime)/1000);
+                $('#fseqprogressrate').html(rate + "KBps");
+            });
         },
 
         accept: function (file, done)
@@ -163,11 +249,20 @@ $(function ()
     var hash = window.location.hash;
     hash && $('ul.navbar-nav li a[href="' + hash + '"]').click();
 
-    RequestListOfFiles();
-
     // start updating stats
     RequestStatusUpdate();
 });
+
+function ProcessLocalConfig(data)
+{
+    // console.info(data);
+    var ParsedLocalConfig = JSON.parse(data);
+
+    wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'device' : ParsedLocalConfig.device, 'network': ParsedLocalConfig.network } } }));
+    wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'input'  : { 'input_config' : ParsedLocalConfig.input  } } } }));
+    wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'output' : { 'output_config': ParsedLocalConfig.output } } } }));
+
+} // ProcessLocalConfig
 
 function UpdateAdvancedOptionsMode()
 {
@@ -198,21 +293,26 @@ function ProcessWindowChange(NextWindow) {
 
     else if (NextWindow === "#admin") {
         wsEnqueue('XA');
+        wsEnqueue(JSON.stringify({ 'cmd': { 'get': 'device' } })); // Get general config
+        wsEnqueue(JSON.stringify({ 'cmd': { 'get': 'output' } })); // Get output config
+        wsEnqueue(JSON.stringify({ 'cmd': { 'get': 'input' } }));  // Get input config
     }
 
     else if ((NextWindow === "#wifi") || (NextWindow === "#home")) {
         wsEnqueue(JSON.stringify({ 'cmd': { 'get': 'device' } })); // Get general config
     }
 
-    // kick start the live stream
     else if (NextWindow === "#config") {
-        RequestListOfFiles();
         wsEnqueue(JSON.stringify({ 'cmd': { 'get': 'output' } })); // Get output config
         wsEnqueue(JSON.stringify({ 'cmd': { 'get': 'input' } }));  // Get input config
+        RequestListOfFiles();
+    }
+
+    else if (NextWindow === "#filemanagement") {
+        RequestListOfFiles();
     }
 
     UpdateAdvancedOptionsMode();
-    RequestListOfFiles();
 
 } // ProcessWindowChange
 
@@ -259,7 +359,7 @@ function RequestListOfFiles()
     // ask for a file list from the server
     wsEnqueue(JSON.stringify({ 'cmd': { 'get': 'files' } })); // Get File List
 
-} // RequestListOfFseqFiles
+} // RequestListOfFiles
 
 function ProcessGetFileResponse(JsonConfigData)
 {
@@ -578,6 +678,13 @@ function ProcessReceivedJsonConfigMessage(JsonConfigData)
         Device_Config = JsonConfigData.device;
         updateFromJSON(JsonConfigData);
 
+        if (false === JsonConfigData.SdCardPresent) {
+            $("#li-filemanagement").addClass("hidden");
+        }
+        else {
+            $("#li-filemanagement").removeClass("hidden");
+		}
+
         // is this a network config?
         if (JsonConfigData.hasOwnProperty("network")) {
             Network_Config = JsonConfigData.network;
@@ -639,27 +746,14 @@ function updateFromJSON(obj)
     $('#device-id').text($('#config #id').val());
 }
 
-function GenerateInputOutputControlName(OptionListName, DisplayedChannelId)
+function GenerateInputOutputControlLabel(OptionListName, DisplayedChannelId)
 {
-    var NewName;
-
-    if ("0" === DisplayedChannelId)
-    {
-        NewName = "First " + OptionListName + " ";
-    }
-
-    if ("1" === DisplayedChannelId)
-    {
-        NewName = "Second " + OptionListName + " ";
-    }
-
-    if ("2" === DisplayedChannelId)
-    {
-        NewName = "Third " + OptionListName + " ";
-    }
+    var Id = parseInt(DisplayedChannelId) + 1;
+    var NewName = OptionListName.charAt(0).toUpperCase() + OptionListName.slice(1) + ": " + Id;
 
     return NewName;
-} // GenerateInputOutputControlName
+
+} // GenerateInputOutputControlLabel
 
 function LoadDeviceSetupSelectedOption(OptionListName, DisplayedChannelId )
 {
@@ -720,7 +814,7 @@ function CreateOptionsFromConfig(OptionListName, Config)
         if (!$('#' + OptionListName + 'mode' + ChannelId).length)
         {
             // create the selection box
-            $('#fg_' + OptionListName).append('<label class="control-label col-sm-2" for="' + OptionListName + ChannelId + '">' + GenerateInputOutputControlName(OptionListName, ChannelId) + ' Mode</label>');
+            $('#fg_' + OptionListName).append('<label class="control-label col-sm-2" for="' + OptionListName + ChannelId + '">' + GenerateInputOutputControlLabel(OptionListName, ChannelId) + ' Mode</label>');
             $('#fg_' + OptionListName).append('<div class="col-sm-2"><select class="form-control wsopt" id="' + OptionListName + ChannelId + '"></select></div>');
             $('#fg_' + OptionListName + '_mode').append('<fieldset id="' + OptionListName + 'mode' + ChannelId + '"></fieldset>');
         }
@@ -756,7 +850,7 @@ function CreateOptionsFromConfig(OptionListName, Config)
 } // CreateOptionsFromConfig
 
 // Builds JSON config submission for "WiFi" tab
-function submitWiFiConfig()
+function ExtractNetworkConfigFromHtmlPage()
 {
     Network_Config.ssid        = $('#ssid').val();
     Network_Config.passphrase  = $('#passphrase').val();
@@ -769,8 +863,12 @@ function submitWiFiConfig()
     Network_Config.ap_fallback = $('#ap_fallback').prop('checked');
     Network_Config.ap_reboot   = $('#ap_reboot').prop('checked');
     Network_Config.ap_timeout  = $('#apt').prop('checked');
+} // ExtractNetworkConfigFromHtmlPage
 
-    wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'network': Network_Config } } }));
+// Builds JSON config submission for "WiFi" tab
+function submitWiFiConfig() {
+    ExtractNetworkConfigFromHtmlPage();
+    wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'device': Device_Config, 'network': Network_Config } } }));
 
 } // submitWiFiConfig
 
@@ -874,8 +972,13 @@ function submitDeviceConfig()
 
     ExtractChannelConfigFromHtmlPage(Output_Config.channels, "output");
 
-    Device_Config.id = $('#config #device #id').val();
-    wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'device': Device_Config } } }));
+    Device_Config.id        = $('#config #device #id').val();
+    Device_Config.miso_pin  = $('#config #device #miso_pin').val();
+    Device_Config.mosi_pin  = $('#config #device #mosi_pin').val();
+    Device_Config.clock_pin = $('#config #device #clock_pin').val();
+    Device_Config.cs_pin    = $('#config #device #cs_pin').val();
+
+    wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'device': Device_Config, 'network': Network_Config } } }));
     wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'input':  { 'input_config': Input_Config } } } }));
     wsEnqueue(JSON.stringify({ 'cmd': { 'set': { 'output': { 'output_config': Output_Config } } } }));
 
@@ -1185,14 +1288,14 @@ function clearStream()
 
 function ProcessRecievedJsonAdminMessage(data)
 {
-    ParsedJsonAdmin = JSON.parse(data);
-    var Admin = ParsedJsonAdmin.admin;
+    var ParsedJsonAdmin = JSON.parse(data);
+    AdminInfo = ParsedJsonAdmin.admin;
 
-    $('#version').text(Admin.version);
-    $('#built').text(Admin.built);
-    $('#usedflashsize').text(Admin.usedflashsize);
-    $('#realflashsize').text(Admin.realflashsize);
-    $('#flashchipid').text(Admin.flashchipid);
+    $('#version').text(AdminInfo.version);
+    $('#built').text(AdminInfo.built);
+    $('#usedflashsize').text(AdminInfo.usedflashsize);
+    $('#realflashsize').text(AdminInfo.realflashsize);
+    $('#flashchipid').text(AdminInfo.flashchipid);
 
 } // ProcessRecievedJsonAdminMessage
 
@@ -1260,6 +1363,20 @@ function ProcessRecievedJsonStatusMessage(data)
     else
     {
         $('#E131Status').addClass("hidden")
+    }
+
+    if (Status.input[0].hasOwnProperty('Artnet')) {
+        $('#ArtnetStatus').removeClass("hidden")
+
+        $('#an_uni_first').text(InputStatus.Artnet.unifirst);
+        $('#an_uni_last').text(InputStatus.Artnet.unilast);
+        $('#an_pkts').text(InputStatus.Artnet.num_packets);
+        $('#an_chanlim').text(InputStatus.Artnet.unichanlim);
+        $('#an_perr').text(InputStatus.Artnet.packet_errors);
+        $('#an_clientip').text(InputStatus.Artnet.last_clientIP);
+    }
+    else {
+        $('#ArtnetStatus').addClass("hidden")
     }
 
     if (Status.input[0].hasOwnProperty('ddp'))
@@ -1390,6 +1507,7 @@ function setConfig()
 // Show reboot modal
 function showReboot()
 {
+    $("#EfuProgressBar").addClass("hidden");
     $('#update').modal('hide');
     $('#reboot').modal();
     setTimeout(function ()

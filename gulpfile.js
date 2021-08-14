@@ -35,7 +35,7 @@ gulp.task('css', function() {
 
 /* JavaScript Task */
 gulp.task('js', function() {
-    return gulp.src(['html/js/jquery*.js', 'html/js/bootstrap.js', 'html/js/jqColorPicker.js', 'html/script.js', 'html/js/dropzone.js'])
+    return gulp.src(['html/js/jquery*.js', 'html/js/bootstrap.js', 'html/js/jqColorPicker.js', 'html/script.js', 'html/js/dropzone.js', 'html/js/FileSaver.js'])
         .pipe(plumber())
         .pipe(concat('esps.js'))
         .pipe(terser({ 'toplevel': true }))
@@ -75,9 +75,9 @@ gulp.task('md', function(done) {
     done();
 });
 
-/* Travis specific stuff */
-gulp.task('travis', function(done) {
-    gulp.src(['.travis/travis.md', 'dist/README.md'])
+/* CI specific stuff */
+gulp.task('ci', function(done) {
+    gulp.src(['.ci/warning.md', 'dist/README.md'])
         .pipe(plumber())
         .pipe(concat('README.html'))
         .pipe(markdown())

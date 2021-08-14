@@ -119,7 +119,8 @@ void c_InputMQTT::GetStatus (JsonObject & jsonStatus)
 {
     // DEBUG_START;
 
-    // JsonObject mqttStatus = jsonStatus.createNestedObject (F ("mqtt"));
+    JsonObject Status = jsonStatus.createNestedObject (F ("mqtt"));
+    Status[CN_id] = InputChannelId;
 
     // DEBUG_END;
 
@@ -130,10 +131,13 @@ void c_InputMQTT::Process ()
 {
     // DEBUG_START;
 
-    if (nullptr != pEffectsEngine)
+    if (IsInputChannelActive)
     {
-        // DEBUG_V ("");
-        pEffectsEngine->Process ();
+        if (nullptr != pEffectsEngine)
+        {
+            // DEBUG_V ("");
+            pEffectsEngine->Process ();
+        }
     }
 
     if (nullptr != pPlayFileEngine)

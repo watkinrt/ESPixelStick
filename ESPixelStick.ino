@@ -81,7 +81,6 @@ static void _u0_putc(char c){
 /////////////////////////////////////////////////////////
 
 // Configuration file
-const String ConfigFileName = "/config.json";
 
 const String VERSION = "4.0-dev (NOT STABLE)";
 const String BUILD_DATE = String(__DATE__) + " - " + String(__TIME__);
@@ -90,7 +89,6 @@ const String CurrentConfigVersion = "1";
 config_t config;                 // Current configuration
 bool     reboot = false;         // Reboot flag
 uint32_t lastUpdate;             // Update timeout tracker
-bool     ConfigSaveNeeded = false;
 bool     ResetWiFi = false;
 
 /////////////////////////////////////////////////////////
@@ -193,17 +191,15 @@ void validateConfig()
     {
         config.id = "No ID Found";
         // DEBUG_V ();
-        ConfigSaveNeeded = true;
     }
 
     if (0 == config.hostname.length ())
     {
         config.hostname = "esps-" + String (chipId);
         // DEBUG_V ();
-        ConfigSaveNeeded = true;
     }
 
-    ConfigSaveNeeded |= WiFiMgr.ValidateConfig (&config);
+    WiFiMgr.ValidateConfig (&config);
 
     // DEBUG_END;
 } // validateConfig
@@ -230,12 +226,10 @@ boolean dsDevice(JsonObject & json)
         {
             // need to do something in the future
             LOG_PORT.println ("Incorrect Device Config Version ID found in config");
-            ConfigSaveNeeded = true;
             // break;
         }
 
         ConfigChanged |= setFromJSON (config.id,        JsonDeviceConfig, CN_id);
-                         // setFromJSON (ConfigSaveNeeded, JsonDeviceConfig, "ConfigSaveNeeded");
     }
     else
     {
@@ -282,7 +276,6 @@ boolean dsNetwork(JsonObject & json)
         {
             // need to do something in the future
             LOG_PORT.println ("Incorrect Version ID found in config");
-            ConfigSaveNeeded = true;
             // break;
         }
 
@@ -316,11 +309,12 @@ boolean dsNetwork(JsonObject & json)
     return ConfigChanged;
 } // dsNetwork
 
-void SetConfig (JsonObject& json)
+void SetConfig (JsonObject & json, const char * DataString)
 {
     // DEBUG_START;
 
-    ConfigSaveNeeded = deserializeCore (json);
+    FileMgr.SaveConfigFile (ConfigFileName, DataString);
+    deserializeCore (json);
 
     // DEBUG_END;
 
@@ -337,9 +331,10 @@ bool deserializeCore (JsonObject & json)
 
     do // once
     {
-        ConfigSaveNeeded |= dsDevice  (json);
+        dsDevice  (json);
+        FileMgr.SetConfig (json);
         ResetWiFi = dsNetwork (json);
-        ConfigSaveNeeded |= ResetWiFi;
+        ResetWiFi;
 
         DataHasBeenAccepted = true;
 
@@ -372,14 +367,13 @@ void loadConfig()
     // DEBUG_V ("");
     if (FileMgr.LoadConfigFile (ConfigFileName, &deserializeCoreHandler))
     {
-        ConfigSaveNeeded = false;
         // DEBUG_V ("Validate");
         validateConfig();
     }
     else
     {
         // DEBUG_V ("Load failed, create a new config file and save it");
-        SaveConfig();
+        CreateNewConfig();
     }
 
     // DEBUG_START;
@@ -402,6 +396,8 @@ void GetConfig (JsonObject & json)
     JsonObject device = json.createNestedObject(CN_device);
     device[CN_id]     = config.id;
     device[CN_cfgver] = CurrentConfigVersion;
+
+    FileMgr.GetConfig (device);
 
     // Network
     JsonObject network = json.createNestedObject(CN_network);
@@ -460,7 +456,7 @@ String serializeCore(boolean pretty)
 } // serializeCore
 
 // Save configuration JSON file
-void SaveConfig()
+void CreateNewConfig()
 {
     // DEBUG_START;
 
@@ -474,7 +470,7 @@ void SaveConfig()
     FileMgr.SaveConfigFile(ConfigFileName, DataToSave);
 
     // DEBUG_END;
-} // SaveConfig
+} // CreateNewConfig
 
 /////////////////////////////////////////////////////////
 //
@@ -485,14 +481,6 @@ void SaveConfig()
 /** Arduino based main loop */
 void loop()
 {
-    // do we need to save the current config?
-    if (true == ConfigSaveNeeded)
-    {
-        // DEBUG_V ("Config Save has been requested.");
-        SaveConfig ();
-        ConfigSaveNeeded = false;
-    } // done need to save the current config
-
 #ifdef ARDUINO_ARCH_ESP32
     esp_task_wdt_reset ();
 #else

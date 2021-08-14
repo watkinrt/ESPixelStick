@@ -38,10 +38,9 @@ public:
     void      Begin             ();                        ///< set up the operating environment based on the current config (or defaults)
     void      Render            ();                        ///< Call from loop(),  renders output data
     void      LoadConfig        ();                        ///< Read the current configuration data from nvram
-    void      SaveConfig        ();                        ///< Save the current configuration data to nvram
-    void      GetConfig         (char * Response);
+    void      GetConfig         (byte * Response, size_t maxlen);
     void      GetConfig         (String & Response);
-    bool      SetConfig         (JsonObject & jsonConfig); ///< Set a new config in the driver
+    void      SetConfig         (const char * NewConfig);  ///< Save the current configuration data to nvram
     void      GetStatus         (JsonObject & jsonStatus);
     void      PauseOutput       (bool PauseTheOutput) { IsOutputPaused = PauseTheOutput; }
     void      GetPortCounts     (uint16_t& PixelCount, uint16_t& SerialCount) {PixelCount = uint16_t(OutputChannelId_End); SerialCount = min(uint16_t(OutputChannelId_End), uint16_t(2)); }
@@ -49,17 +48,35 @@ public:
     uint16_t  GetBufferUsedSize () { return UsedBufferSize; } ///< Get the size (in intensities) of the buffer into which the E1.31 handler will stuff data
     uint16_t  GetBufferSize     () { return sizeof(OutputBuffer); } ///< Get the size (in intensities) of the buffer into which the E1.31 handler will stuff data
     void      DeleteConfig      () { FileMgr.DeleteConfigFile (ConfigFileName); }
+    void      PauseOutputs      ();
 
     // handles to determine which output channel we are dealing with
     enum e_OutputChannelIds
     {
-        OutputChannelId_1 = 0,
+        OutputChannelId_UART_1 = 0,
 #ifdef ARDUINO_ARCH_ESP32
-        OutputChannelId_2,
+        OutputChannelId_UART_2,
+        // RMT channels
+        OutputChannelId_RMT_1,
+        OutputChannelId_RMT_2,
+#ifndef ESP32_CAM
+        OutputChannelId_RMT_3,
+        OutputChannelId_RMT_4,
+        OutputChannelId_RMT_5,
+        OutputChannelId_RMT_6,
+        OutputChannelId_RMT_7,
+        OutputChannelId_RMT_8,
+#endif // ndef ESP32_CAM
 #endif // def ARDUINO_ARCH_ESP32
         OutputChannelId_Relay,
         OutputChannelId_End, // must be last in the list
-        OutputChannelId_Start = OutputChannelId_1
+        OutputChannelId_Start = OutputChannelId_UART_1,
+#ifdef ARDUINO_ARCH_ESP32
+        OutputChannelId_UART_LAST = OutputChannelId_UART_2
+#else
+        OutputChannelId_UART_LAST = OutputChannelId_UART_1
+#endif // def ARDUINO_ARCH_ESP32
+
     };
 
     enum e_OutputType
@@ -79,7 +96,7 @@ public:
 #ifdef ARDUINO_ARCH_ESP8266
 #   define OM_MAX_NUM_CHANNELS  (800 * 3)
 #else
-#   define OM_MAX_NUM_CHANNELS  (2000 * 3)
+#   define OM_MAX_NUM_CHANNELS  (3000 * 3)
 #endif // !def ARDUINO_ARCH_ESP8266
 
 private:
@@ -94,11 +111,11 @@ private:
 #ifdef ARDUINO_ARCH_ESP8266
 #   define OM_MAX_CONFIG_SIZE      ((size_t)(5*1024))
 #else
-#   define OM_MAX_CONFIG_SIZE      ((size_t)(6*1024))
+#   define OM_MAX_CONFIG_SIZE      ((size_t)(8*1024))
 #endif // !def ARDUINO_ARCH_ESP8266
 
     bool HasBeenInitialized = false;
-    bool ConfigSaveNeeded   = false;
+    bool ConfigLoadNeeded   = false;
     bool IsOutputPaused     = false;
 
     bool ProcessJsonConfig (JsonObject & jsonConfig);
@@ -106,7 +123,6 @@ private:
     void UpdateDisplayBufferReferences (void);
 
     String ConfigFileName;
-    String ConfigData;
 
     uint8_t OutputBuffer[OM_MAX_NUM_CHANNELS];
     uint16_t UsedBufferSize = 0;

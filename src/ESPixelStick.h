@@ -34,11 +34,14 @@
 #	error "Unsupported CPU type"
 #endif
 
+#define ARDUINOJSON_USE_LONG_LONG 1
+
 #include <Ticker.h>
 #include <ArduinoJson.h>
 
 #include "memdebug.h"
 #include "ConstNames.hpp"
+#include "GPIO_Defs.hpp"
 
 #define REBOOT_DELAY    100     ///< Delay for rebooting once reboot flag is set
 #define LOG_PORT        Serial  ///< Serial port for console logging
@@ -54,7 +57,6 @@
 #define RDMNET_DNSSD_E133VERS   1
 
 // Configuration file params
-#define CONFIG_MAX_SIZE (3*1024)    ///< Sanity limit for config file
 
 /// Core configuration structure
 typedef struct {
@@ -80,8 +82,8 @@ void    deserializeCoreHandler (DynamicJsonDocument& jsonDoc);
 bool    deserializeCore        (JsonObject & json);
 boolean dsDevice               (JsonObject & json);
 boolean dsNetwork              (JsonObject & json);
-void    SaveConfig             ();
 extern  bool reboot;
+static const String ConfigFileName = "/config.json";
 
 template <typename T, typename J, typename N>
 bool setFromJSON (T& OutValue, J& Json, N Name)

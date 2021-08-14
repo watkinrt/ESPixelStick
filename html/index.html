@@ -1,21 +1,21 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title id="title"></title>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title id="title"></title>
 
-        <!-- for local development
-        <link rel="stylesheet" type="text/css" href="css/bootstrap.css">
-        <link rel="stylesheet" type="text/css" href="style.css">
-        <link rel="stylesheet" href="css/treejs.css" id="treejs_styles">
-        <link rel="stylesheet" href="css/dropzone.css" id="dropzone_styles">
-        -->
+    <!-- for local development
+    <link rel="stylesheet" type="text/css" href="css/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <link rel="stylesheet" href="css/treejs.css" id="treejs_styles">
+    <link rel="stylesheet" href="css/dropzone.css" id="dropzone_styles">
+    -->
 
-        <link rel="stylesheet" type="text/css" href="esps.css">
+    <link rel="stylesheet" type="text/css" href="esps.css">
 
-    </head>
+</head>
 
     <body>
         <nav class="navbar navbar-inverse navbar-fixed-top">
@@ -75,6 +75,18 @@
                                 <tr><td width="33%">Total Packets</td><td><span id="pkts"></span></td></tr>
                                 <tr><td width="33%">Packet Errors</td><td><span id="perr"></span></td></tr>
                                 <tr><td width="33%">Source IP</td><td><span id="clientip"></span></td></tr>
+                            </table>
+                        </fieldset>
+                    </div>
+                    <div class="col-sm-6 hidden" id="ArtnetStatus">
+                        <fieldset>
+                            <legend class="esps-legend">Artnet Status</legend>
+                            <table class="esps-table">
+                                <tr><td width="33%">Universe Range</td><td><span id="an_uni_first"></span> to <span id="an_uni_last"></span></td></tr>
+                                <tr><td width="33%">Channels / Universe</td><td><span id="an_chanlim"></span></td></tr>
+                                <tr><td width="33%">Total Packets</td><td><span id="an_pkts"></span></td></tr>
+                                <tr><td width="33%">Packet Errors</td><td><span id="an_perr"></span></td></tr>
+                                <tr><td width="33%">Source IP</td><td><span id="an_clientip"></span></td></tr>
                             </table>
                         </fieldset>
                     </div>
@@ -223,6 +235,28 @@
                             <label class="control-label col-sm-2" for="id">Device ID</label>
                             <div class="col-sm-10"><input type="text" class="form-control" id="id" maxlength="64" title="Plain text ID to help identify your device."></div>
                         </div>
+                        <div class="form-group has-feedback">
+                            <label class="control-label col-sm-2 hidden AdvancedMode" for="miso_pin">SD MISO Pin</label>
+                            <div class="col-sm-4">
+                                <input type="number" class="form-control is-valid hidden AdvancedMode" id="miso_pin" step="1" min="1" max="24" value="0" required title="GPIO on which MISO will be received">
+                            </div>
+                            <label class="control-label col-sm-2 hidden AdvancedMode" for="mosi_pin">SD MOSI Pin</label>
+                            <div class="col-sm-4">
+                                <input type="number" class="form-control is-valid hidden AdvancedMode" id="mosi_pin" step="1" min="1" max="24" value="0" required title="GPIO on which MOSI will be sent">
+                            </div>
+                        </div>
+
+                        <div class="form-group has-feedback">
+                            <label class="control-label col-sm-2 hidden AdvancedMode" for="clock_pin">SD Clock Pin</label>
+                            <div class="col-sm-4">
+                                <input type="number" class="form-control is-valid hidden AdvancedMode" id="clock_pin" step="1" min="1" max="24" value="0" required title="GPIO on which CLOCK will be sent">
+                            </div>
+                            <label class="control-label col-sm-2 hidden AdvancedMode" for="cs_pin">SD Chip Select Pin</label>
+                            <div class="col-sm-4">
+                                <input type="number" class="form-control is-valid hidden AdvancedMode" id="cs_pin" step="1" min="1" max="24" value="0" required title="GPIO on which Chip Select will be sent">
+                            </div>
+                        </div>
+
                         <!-- Dynamic input / ouput config -->
                         <div class="form-group" id="fg_input"></div>
                         <div class="form-group" id="fg_output"></div>
@@ -321,6 +355,12 @@
                                 </tbody>
                             </table>
 
+                            <div id="fseqprogress_fg" class="form-group col-sm-10 hidden">
+                                <label class="control-label col-sm-4" for="fseqprogressbytes">Bytes Sent:</label>
+                                <p class="form-control-static" id="fseqprogressbytes"></p>
+                                <label class="control-label col-sm-4" for="fseqprogressbytes">Transfer Rate:</label>
+                                <p class="form-control-static" id="fseqprogressrate"></p>
+                            </div>
                             <div id="filemanagementupload">
                                 <p>Click to Upload a file with the file dialog or drag and drop a file into the dashed region</p>
                             </div>
@@ -352,9 +392,17 @@
                             <div class="col-sm-9"><p class="form-control-static" id="flashchipid"></p></div>
                         </div>
                         <div class="form-group">
-                            <div class="col-sm-offset-2 col-sm-10">
+                            <div class="col-sm-offset-2 col-sm-3">
+                                <button type="button" class="btn btn-primary" id="backupconfig">Backup Settings</button>
+                            </div>
+                            <div class="col-sm-3">
                                 <label class="btn btn-primary btn-file">
-                                    Update Firmware <input type="file" id="efu" name="file" accept=".efu" style="display: none;">
+                                    Update Firmware <input type="file" id="efu" name="file" accept=".efu" style="display: none;"><br /><progress class="hidden" id="EfuProgressBar" value="0" max="100"></progress>
+                                </label>
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="btn btn-primary btn-file">
+                                    Restore Settings <input type="file" id="restoreconfig" accept=".json" style="display: none;">
                                 </label>
                             </div>
                         </div>
@@ -432,6 +480,7 @@
         <script type="text/javascript" src="js/bootstrap.js"></script>
         <script type="text/javascript" src="js/jqColorPicker.js"></script>
         <script type="text/javascript" src="script.js"></script>
+        <script type="text/javascript" src="js/FileSaver.js"></script>
         -->
 
         <script type="text/javascript" src="esps.js"></script>

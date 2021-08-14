@@ -20,11 +20,17 @@
 #include "ESPixelStick.h"
 #include <Int64String.h>
 
-#ifdef ARDUINO_ARCH_ESP8266
-#else
-#endif // def ARDUINO_ARCH_ESP8266
-
 #include "FileMgr.hpp"
+#include <StreamUtils.h>
+
+#define HTML_TRANSFER_BLOCK_SIZE    563
+#ifdef ARDUINO_ARCH_ESP32
+#   define NumBlocksToBuffer        21
+#else
+#   define NumBlocksToBuffer         9
+#endif
+
+static const uint32_t FileUploadBufferSize = HTML_TRANSFER_BLOCK_SIZE * NumBlocksToBuffer;
 
 //-----------------------------------------------------------------------------
 ///< Start up the driver and put it into a safe mode
@@ -50,6 +56,8 @@ void c_FileMgr::Begin ()
 
     do // once
     {
+        InitSdFileList ();
+
         if (!LITTLEFS.begin ())
         {
             LOG_PORT.println ( String(CN_stars) + F (" Flash File system did not initialize correctly ") + CN_stars);
@@ -60,24 +68,7 @@ void c_FileMgr::Begin ()
             listDir (LITTLEFS, String ("/"), 3);
         }
 
-#ifdef ARDUINO_ARCH_ESP32
-        SPI.begin (clk_pin, miso_pin, mosi_pin, cs_pin);
-
-        if (!SD.begin (cs_pin))
-#else
-        SDFSConfig cfg (SD_CARD_CS_PIN, SD_CARD_CLK_MHZ);
-        SDFS.setConfig (cfg);
-
-        if (!SDFS.begin ())
-#endif
-        {
-            LOG_PORT.println (String (F ("No SD card installed")));
-            break;
-        }
-
-        SdCardInstalled = true;
-
-        DescribeSdCardToUser ();
+        SetSpiIoPins ();
 
     } while (false);
 
@@ -85,30 +76,88 @@ void c_FileMgr::Begin ()
 } // begin
 
 //-----------------------------------------------------------------------------
-void c_FileMgr::SetSpiIoPins (uint8_t miso, uint8_t mosi, uint8_t clock, uint8_t cs)
+boolean c_FileMgr::SetConfig (JsonObject & json)
 {
-    miso_pin = miso;
-    mosi_pin = mosi;
-    clk_pin  = clock;
-    cs_pin   = cs;
+    // DEBUG_START;
 
-    SDFS.end ();
+    boolean ConfigChanged = false;
+    if (json.containsKey (CN_device))
+    {
+        JsonObject JsonDeviceConfig = json[CN_device];
+
+        ConfigChanged |= setFromJSON (miso_pin, JsonDeviceConfig, CN_miso_pin);
+        ConfigChanged |= setFromJSON (mosi_pin, JsonDeviceConfig, CN_mosi_pin);
+        ConfigChanged |= setFromJSON (clk_pin,  JsonDeviceConfig, CN_clock_pin);
+        ConfigChanged |= setFromJSON (cs_pin,   JsonDeviceConfig, CN_cs_pin);
+    }
+    else
+    {
+        LOG_PORT.println (F ("No File Manager settings found."));
+    }
+
+    // DEBUG_V (String ("ConfigChanged: ") + String (ConfigChanged));
+
+    if (ConfigChanged)
+    {
+        SetSpiIoPins ();
+    }
+
+    // DEBUG_END;
+
+    return ConfigChanged;
+
+} // SetConfig
+
+//-----------------------------------------------------------------------------
+void c_FileMgr::GetConfig (JsonObject& json)
+{
+    // DEBUG_START;
+
+    json[CN_miso_pin]  = miso_pin;
+    json[CN_mosi_pin]  = mosi_pin;
+    json[CN_clock_pin] = clk_pin;
+    json[CN_cs_pin]    = cs_pin;
+
+    // DEBUG_END;
+
+} // GetConfig
+
+//-----------------------------------------------------------------------------
+void c_FileMgr::SetSpiIoPins ()
+{
+    // DEBUG_START;
+
+    // DEBUG_V (String ("miso_pin: ") + String (miso_pin));
+    // DEBUG_V (String ("mosi_pin: ") + String (mosi_pin));
+    // DEBUG_V (String (" clk_pin: ") + String (clk_pin));
+    // DEBUG_V (String ("  cs_pin: ") + String (cs_pin));
+
+    if (SdCardInstalled)
+    {
+        SDFS.end ();
+    }
 
 #ifdef ARDUINO_ARCH_ESP32
-    SPI.end ();
     SPI.begin (clk_pin, miso_pin, mosi_pin, cs_pin);
-#else
-    SDFSConfig sdcfg;
-    SPISettings spicfg;
 
-    SDFSConfig cfg (cs_pin, SD_SCK_MHZ (80));
+    if (!SD.begin (cs_pin))
+#else
+    SDFSConfig cfg (SD_CARD_CS_PIN, SD_CARD_CLK_MHZ);
     SDFS.setConfig (cfg);
-#endif
 
     if (!SDFS.begin ())
+#endif
     {
-        LOG_PORT.println (String (F ("File Manager: No SD card")));
+        LOG_PORT.println (String (F ("No SD card installed")));
+        SdCardInstalled = false;
     }
+    else
+    {
+        SdCardInstalled = true;
+        DescribeSdCardToUser ();
+    }
+
+    // DEBUG_END;
 
 } // SetSpiIoPins
 
@@ -169,7 +218,6 @@ void c_FileMgr::listDir (fs::FS& fs, String dirname, uint8_t levels)
 //-----------------------------------------------------------------------------
 bool c_FileMgr::LoadConfigFile (const String& FileName, DeserializationHandler Handler)
 {
-    // DEBUG_START;
     boolean retval = false;
 
     do // once
@@ -177,29 +225,39 @@ bool c_FileMgr::LoadConfigFile (const String& FileName, DeserializationHandler H
         String CfgFileMessagePrefix = String (CN_Configuration_File_colon) + "'" + FileName + "' ";
 
         // DEBUG_V ("allocate the JSON Doc");
-
+/*
         String RawFileData;
         if (false == ReadConfigFile (FileName, RawFileData))
         {
             LOG_PORT.println (String(CN_stars) + CfgFileMessagePrefix + F ("Could not read file.") + CN_stars);
             break;
         }
+*/
+        fs::File file = LITTLEFS.open (FileName.c_str (), "r");
+        if (!file)
+        {
+            LOG_PORT.println (String (CN_stars) + CfgFileMessagePrefix + String (F ("Could not open file for reading.")) + CN_stars);
+            break;
+        }
 
         // DEBUG_V ("Convert File to JSON document");
-        size_t JsonDocSize = RawFileData.length () * 3;
-        // DEBUG_V (String ("RawFileData.length: ") + String (RawFileData.length ()));
-        // DEBUG_V (String (" Final JsonDocSize: ") + String (JsonDocSize));
-
+        size_t JsonDocSize = file.size () * 3;
         DynamicJsonDocument jsonDoc (JsonDocSize);
-        DeserializationError error = deserializeJson (jsonDoc, (const String)RawFileData);
+
+        DeserializationError error = deserializeJson (jsonDoc, file);
+        file.close ();
 
         // DEBUG_V ("Error Check");
         if (error)
         {
-            String CfgFileMessagePrefix = String (CN_Configuration_File_colon) + "'" + FileName + "' ";
-            LOG_PORT.println (CN_Heap_colon + String (ESP.getFreeHeap ()));
+            // LOG_PORT.println (CN_Heap_colon + String (ESP.getMaxFreeBlockSize ()));
             LOG_PORT.println (String(CN_stars) + CfgFileMessagePrefix + String (F ("Deserialzation Error. Error code = ")) + error.c_str () + CN_stars);
-            LOG_PORT.println (CN_plussigns + RawFileData + CN_minussigns);
+            // LOG_PORT.println (CN_plussigns + RawFileData + CN_minussigns);
+	        // DEBUG_V (String ("                heap: ") + String (ESP.getFreeHeap ()));
+    	    // DEBUG_V (String (" getMaxFreeBlockSize: ") + String (ESP.getMaxFreeBlockSize ()));
+        	// DEBUG_V (String ("           file.size: ") + String (file.size ()));
+	        // DEBUG_V (String ("Expected JsonDocSize: ") + String (JsonDocSize));
+    	    // DEBUG_V (String ("    jsonDoc.capacity: ") + String (jsonDoc.capacity ()));
             break;
         }
 
@@ -223,6 +281,17 @@ bool c_FileMgr::SaveConfigFile (const String& FileName, String& FileData)
 {
     // DEBUG_START;
 
+    bool Response = SaveConfigFile (FileName, FileData.c_str ());
+
+    // DEBUG_END;
+    return Response;
+} // SaveConfigFile
+
+//-----------------------------------------------------------------------------
+bool c_FileMgr::SaveConfigFile (const String& FileName, const char * FileData)
+{
+    // DEBUG_START;
+
     bool Response = false;
     String CfgFileMessagePrefix = String (CN_Configuration_File_colon) + "'" + FileName + "' ";
     // DEBUG_V (FileData);
@@ -230,14 +299,26 @@ bool c_FileMgr::SaveConfigFile (const String& FileName, String& FileData)
     fs::File file = LITTLEFS.open (FileName.c_str (), "w");
     if (!file)
     {
-        LOG_PORT.println (String(CN_stars) + CfgFileMessagePrefix + String (F ("Could not open file for writing..")) + CN_stars);
+        LOG_PORT.println (String (CN_stars) + CfgFileMessagePrefix + String (F ("Could not open file for writing..")) + CN_stars);
     }
     else
     {
         file.seek (0, SeekSet);
-        file.print (FileData);
-        LOG_PORT.println (CfgFileMessagePrefix + String (F ("saved.")));
+
+        WriteBufferingStream bufferedFileWrite{ file, 128 };
+        bufferedFileWrite.print (FileData);
+        // file.print (FileData);
+
         file.close ();
+
+        file = LITTLEFS.open (FileName.c_str (), "r");
+        LOG_PORT.print (CN_Configuration_File_colon);
+        LOG_PORT.print (FileName);
+        LOG_PORT.printf( " saved %ul bytes.\n", file.size ());
+
+        // LOG_PORT.println (CfgFileMessagePrefix + String (F ("saved ")) + String (file.size ()) + F (" bytes."));
+        file.close ();
+
         Response = true;
     }
 
@@ -266,13 +347,18 @@ bool c_FileMgr::ReadConfigFile (const String& FileName, String& FileData)
     // DEBUG_START;
 
     bool GotFileData = false;
+    String CfgFileMessagePrefix = String (CN_Configuration_File_colon) + "'" + FileName + "' ";
 
     // DEBUG_V (String("File '") + FileName + "' is being opened.");
     fs::File file = LITTLEFS.open (FileName.c_str (), CN_r);
     if (file)
     {
+        LOG_PORT.println (CfgFileMessagePrefix + String (F ("reading ")) + String (file.size()) + F (" bytes."));
+
         // DEBUG_V (String("File '") + FileName + "' is open.");
         file.seek (0, SeekSet);
+        // ReadBufferingStream bufferedFileRead{ file, 128 };
+        // FileData = bufferedFileRead.readString ();
         FileData = file.readString ();
         file.close ();
         GotFileData = true;
@@ -336,24 +422,128 @@ bool c_FileMgr::ReadConfigFile (const String& FileName, JsonDocument & FileData)
 } // ReadConfigFile
 
 //-----------------------------------------------------------------------------
+bool c_FileMgr::ReadConfigFile (const String & FileName, byte * FileData, size_t maxlen)
+{
+    // DEBUG_START;
+    bool GotFileData = false;
+
+    do // once
+    {
+        // DEBUG_V (String("File '") + FileName + "' is being opened.");
+        fs::File file = LITTLEFS.open (FileName.c_str (), CN_r);
+        if (!file)
+        {
+            LOG_PORT.println (String (CN_stars) + CN_Configuration_File_colon + "'" + FileName + F ("' not found.") + CN_stars);
+            break;
+        }
+
+        if (file.size() >= maxlen)
+        {
+            LOG_PORT.println (String (CN_stars) + CN_Configuration_File_colon + "'" + FileName + F ("' too large for buffer. ") + CN_stars);
+            file.close ();
+            break;
+        }
+
+        LOG_PORT.print   (FileName);
+        LOG_PORT.print   (" reading ");
+        LOG_PORT.print   (file.size ());
+        LOG_PORT.println (" bytes.");
+
+        // DEBUG_V (String("File '") + FileName + "' is open.");
+        file.seek (0, SeekSet);
+        // ReadBufferingStream bufferedFileRead{ file, 128 };
+        // FileData = bufferedFileRead.readString ();
+        file.read (FileData, file.size());
+        file.close ();
+
+        GotFileData = true;
+
+        // DEBUG_V (FileData);
+
+    } while (false);
+
+    // DEBUG_END;
+    return GotFileData;
+
+} // ReadConfigFile
+
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-c_FileMgr::FileId c_FileMgr::CreateFileHandle ()
+//-----------------------------------------------------------------------------
+void c_FileMgr::InitSdFileList ()
 {
     // DEBUG_START;
 
+    int index = 0;
+    for (auto& currentFileListEntry : FileList)
+    {
+        currentFileListEntry.handle  = 0;
+        currentFileListEntry.entryId = index++;
+    }
+
+    // DEBUG_END;
+
+} // InitFileList
+
+//-----------------------------------------------------------------------------
+int c_FileMgr::FileListFindSdFileHandle (FileId HandleToFind)
+{
+    // DEBUG_START;
+
+    int response = -1;
+    // DEBUG_V (String ("HandleToFind: ") + String (HandleToFind));
+
+    for (auto & currentFileListEntry : FileList)
+    {
+        // DEBUG_V (String ("currentFileListEntry.handle: ")  + String (currentFileListEntry.handle));
+        // DEBUG_V (String ("currentFileListEntry.entryId: ") + String (currentFileListEntry.entryId));
+
+        if (currentFileListEntry.handle == HandleToFind)
+        {
+            response = currentFileListEntry.entryId;
+            break;
+        }
+    }
+
+    // DEBUG_END;
+
+    return response;
+} // FileListFindSdFileHandle
+
+//-----------------------------------------------------------------------------
+c_FileMgr::FileId c_FileMgr::CreateSdFileHandle ()
+{
+    // DEBUG_START;
+
+    FileId response = 0;
     FileId FileHandle = millis ();
 
-    if (FileList.end () != FileList.find (FileHandle))
+    // create a unique handle
+    while (-1 != FileListFindSdFileHandle (FileHandle))
     {
         ++FileHandle;
     }
 
+    // find an empty slot
+    for (auto & currentFileListEntry : FileList)
+    {
+        if (currentFileListEntry.handle == 0)
+        {
+            currentFileListEntry.handle = FileHandle;
+            response = FileHandle;
+            break;
+        }
+    }
+
+    if (0 == response)
+    {
+        LOG_PORT.println (String (CN_stars) + F (" Could not allocate another file handle ") + CN_stars);
+    }
     // DEBUG_V (String ("FileHandle: ") + String (FileHandle));
 
     // DEBUG_END;
 
-    return FileHandle;
+    return response;
 } // CreateFileHandle
 
 //-----------------------------------------------------------------------------
@@ -514,6 +704,8 @@ void c_FileMgr::printDirectory (Dir dir, int numTabs)
 //-----------------------------------------------------------------------------
 void c_FileMgr::SaveSdFile (const String & FileName, String & FileData)
 {
+    // DEBUG_START;
+
     do // once
     {
         FileId FileHandle = 0;
@@ -529,6 +721,8 @@ void c_FileMgr::SaveSdFile (const String & FileName, String & FileData)
         CloseSdFile (FileHandle);
 
     } while (false);
+
+    // DEBUG_END;
 
 } // SaveSdFile
 
@@ -579,20 +773,24 @@ bool c_FileMgr::OpenSdFile (const String & FileName, FileMode Mode, FileId & Fil
         }
 
         // DEBUG_V ();
-        FileHandle = CreateFileHandle ();
+        FileHandle = CreateSdFileHandle ();
         // DEBUG_V (String("FileHandle: ") + String(FileHandle));
 
-        FileList[FileHandle] = SDFS.open (FileNamePrefix + FileName, ReadWrite);
-
-        // DEBUG_V ();
-        if (FileMode::FileWrite == Mode)
+        int FileListIndex;
+        if (-1 != (FileListIndex = FileListFindSdFileHandle (FileHandle)))
         {
-            // DEBUG_V ("Write Mode");
-            FileList[FileHandle].seek (0, SeekSet);
-        }
-        // DEBUG_V ();
+            FileList[FileListIndex].info = SDFS.open (FileNamePrefix + FileName, ReadWrite);
 
-        FileIsOpen = true;
+            // DEBUG_V ();
+            if (FileMode::FileWrite == Mode)
+            {
+                // DEBUG_V ("Write Mode");
+                FileList[FileListIndex].info.seek (0, SeekSet);
+            }
+            // DEBUG_V ();
+
+            FileIsOpen = true;
+        }
 
     } while (false);
 
@@ -613,8 +811,13 @@ bool c_FileMgr::ReadSdFile (const String & FileName, String & FileData)
     if (true == OpenSdFile (FileName, FileMode::FileRead, FileHandle))
     {
         // DEBUG_V (String("File '") + FileName + "' is open.");
-        FileList[FileHandle].seek (0, SeekSet);
-        FileData = FileList[FileHandle].readString ();
+        int FileListIndex;
+        if (-1 != (FileListIndex = FileListFindSdFileHandle (FileHandle)))
+        {
+            FileList[FileListIndex].info.seek (0, SeekSet);
+            ReadBufferingStream bufferedFileRead{ FileList[FileListIndex].info, 128 };
+            FileData = bufferedFileRead.readString ();
+        }
 
         CloseSdFile (FileHandle);
         GotFileData = (0 != FileData.length());
@@ -643,9 +846,10 @@ size_t c_FileMgr::ReadSdFile (const FileId& FileHandle, byte* FileData, size_t N
     // DEBUG_V (String ("  NumBytesToRead: ") + String (NumBytesToRead));
     // DEBUG_V (String ("StartingPosition: ") + String (StartingPosition));
 
-    if (FileList.end () != FileList.find (FileHandle))
+    int FileListIndex;
+    if (-1 != (FileListIndex = FileListFindSdFileHandle (FileHandle)))
     {
-        FileList[FileHandle].seek (StartingPosition, SeekSet);
+        FileList[FileListIndex].info.seek (StartingPosition, SeekSet);
         response = ReadSdFile (FileHandle, FileData, NumBytesToRead);
     }
     else
@@ -667,9 +871,11 @@ size_t c_FileMgr::ReadSdFile (const FileId& FileHandle, byte* FileData, size_t N
     // DEBUG_V (String ("NumBytesToRead: ") + String (NumBytesToRead));
 
     size_t response = 0;
-    if (FileList.end() != FileList.find (FileHandle))
+    int FileListIndex;
+    if (-1 != (FileListIndex = FileListFindSdFileHandle (FileHandle)))
     {
-        response = FileList[FileHandle].read (FileData, NumBytesToRead);
+        ReadBufferingStream bufferedFileRead{ FileList[FileListIndex].info, 128 };
+        response = bufferedFileRead.readBytes (((char*)FileData), NumBytesToRead);
     }
     else
     {
@@ -685,11 +891,11 @@ size_t c_FileMgr::ReadSdFile (const FileId& FileHandle, byte* FileData, size_t N
 void c_FileMgr::CloseSdFile (const FileId& FileHandle)
 {
     // DEBUG_START;
-
-    if (FileList.end () != FileList.find (FileHandle))
+    int FileListIndex;
+    if (-1 != (FileListIndex = FileListFindSdFileHandle (FileHandle)))
     {
-        FileList[FileHandle].close ();
-        FileList.erase (FileHandle);
+        FileList[FileListIndex].info.close ();
+        FileList[FileListIndex].handle = 0;
     }
     else
     {
@@ -704,9 +910,11 @@ void c_FileMgr::CloseSdFile (const FileId& FileHandle)
 size_t c_FileMgr::WriteSdFile (const FileId& FileHandle, byte* FileData, size_t NumBytesToWrite)
 {
     size_t response = 0;
-    if (FileList.end () != FileList.find (FileHandle))
+    int FileListIndex;
+    if (-1 != (FileListIndex = FileListFindSdFileHandle (FileHandle)))
     {
-        response = FileList[FileHandle].write (FileData, NumBytesToWrite);
+        WriteBufferingStream bufferedFileWrite{ FileList[FileListIndex].info, 128 };
+        response = bufferedFileWrite.write (FileData, NumBytesToWrite);
     }
     else
     {
@@ -721,9 +929,10 @@ size_t c_FileMgr::WriteSdFile (const FileId& FileHandle, byte* FileData, size_t 
 size_t c_FileMgr::WriteSdFile (const FileId& FileHandle, byte* FileData, size_t NumBytesToWrite, size_t StartingPosition)
 {
     size_t response = 0;
-    if (FileList.end () != FileList.find (FileHandle))
+    int FileListIndex;
+    if (-1 != (FileListIndex = FileListFindSdFileHandle (FileHandle)))
     {
-        FileList[FileHandle].seek (StartingPosition, SeekSet);
+        FileList[FileListIndex].info.seek (StartingPosition, SeekSet);
         response = WriteSdFile (FileHandle, FileData, NumBytesToWrite);
     }
     else
@@ -739,9 +948,10 @@ size_t c_FileMgr::WriteSdFile (const FileId& FileHandle, byte* FileData, size_t 
 size_t c_FileMgr::GetSdFileSize (const FileId& FileHandle)
 {
     size_t response = 0;
-    if (FileList.end () != FileList.find (FileHandle))
+    int FileListIndex;
+    if (-1 != (FileListIndex = FileListFindSdFileHandle (FileHandle)))
     {
-        response = FileList[FileHandle].size ();
+        response = FileList[FileListIndex].info.size ();
     }
     else
     {
@@ -765,23 +975,68 @@ void c_FileMgr::handleFileUpload (const String & filename,
         handleFileUploadNewFile (filename);
     }
 
+    // DEBUG_V (String ("index: ") + String (index));
+    // DEBUG_V (String ("  len: ") + String (len));
+    // DEBUG_V (String ("final: ") + String (final));
+
     if ((0 != len) && (0 != fsUploadFileName.length ()))
     {
-        // Write data
-        // DEBUG_V ("UploadWrite: " + String (len) + String (" bytes"));
-        WriteSdFile (fsUploadFile, data, len);
-        // LOG_PORT.print (String ("Writting bytes: ") + String (index) + '\r');
-        LOG_PORT.print (".");
+        if (nullptr == FileUploadBuffer)
+        {
+            // Write data
+            // DEBUG_V ("UploadWrite: " + String (len) + String (" bytes"));
+            WriteSdFile (fsUploadFile, data, len);
+            // LOG_PORT.print (String ("Writting bytes: ") + String (index) + '\r');
+            // LOG_PORT.print (".");
+        }
+        else
+        {
+            // is there space in the buffer for this chunk?
+            if (((len + FileUploadBufferOffset) >= FileUploadBufferSize) &&
+                (0 != FileUploadBufferOffset))
+            {
+                // write out the buffer
+                WriteSdFile (fsUploadFile, FileUploadBuffer, FileUploadBufferOffset);
+                FileUploadBufferOffset = 0;
+            }
+
+            // will this chunk fit in the buffer
+            if (len < FileUploadBufferSize)
+            {
+                memcpy (&FileUploadBuffer[FileUploadBufferOffset], data, len);
+                FileUploadBufferOffset += len;
+            }
+            else
+            {
+                // chunk is bigger than our buffer
+                WriteSdFile (fsUploadFile, data, len);
+            }
+        }
     }
 
     if ((true == final) && (0 != fsUploadFileName.length ()))
     {
-        LOG_PORT.println ("");
+        // save the last bits
+        if (FileUploadBufferOffset)
+        {
+            WriteSdFile (fsUploadFile, FileUploadBuffer, FileUploadBufferOffset);
+            FileUploadBufferOffset = 0;
+        }
+
         // DEBUG_V ("UploadEnd: " + String(index + len) + String(" bytes"));
         LOG_PORT.println (String (F ("Upload File: '")) + fsUploadFileName + String (F ("' Done")));
 
-        FileMgr.CloseSdFile (fsUploadFile);
+        CloseSdFile (fsUploadFile);
         fsUploadFileName = "";
+
+        if (nullptr != FileUploadBuffer)
+        {
+            // DEBUG_V (String (" Free Upload Buffer. Heap: ") + String (ESP.getFreeHeap ()));
+            free (FileUploadBuffer);
+            FileUploadBuffer = nullptr;
+            FileUploadBufferOffset = 0;
+            // DEBUG_V (String ("Freed Upload Buffer. Heap: ") + String (ESP.getFreeHeap ()));
+        }
     }
 
     // DEBUG_END;
@@ -812,6 +1067,21 @@ void c_FileMgr::handleFileUploadNewFile (const String & filename)
 
     // Open the file for writing
     FileMgr.OpenSdFile (fsUploadFileName, FileMode::FileWrite, fsUploadFile);
+
+    if (nullptr == FileUploadBuffer)
+    {
+        FileUploadBuffer = (byte*)malloc (FileUploadBufferSize);
+        if (nullptr != FileUploadBuffer)
+        {
+            // DEBUG_V ("Allocated file upload buffer");
+        }
+        else
+        {
+            // DEBUG_V ("Failed to Allocate file upload buffer");
+        }
+    }
+
+    FileUploadBufferOffset = 0;
 
     // DEBUG_END;
 
