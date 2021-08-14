@@ -23,7 +23,7 @@
 #   include <eagle_soc.h>
 #   include <ets_sys.h>
 #   include <SPI.h>
-#   include <Ethernet.h>
+// #   include <Ethernet.h>
 #else
 #   include <esp_wifi.h>
 #   include <ETH.h>

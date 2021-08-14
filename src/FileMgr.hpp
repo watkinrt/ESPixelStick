@@ -99,7 +99,7 @@ private:
 // #   define SD_CARD_CLK_PIN     18
 // #endif
 
-// #   define SD_CARD_CLK_MHZ     SD_SCK_MHZ(50)  // 50 MHz SPI clock
+#   define SD_CARD_CLK_MHZ     SD_SCK_MHZ(50)  // 50 MHz SPI clock
 
 // #ifdef ARDUINO_ARCH_ESP32
 // #   ifndef SD_CARD_CS_PIN
