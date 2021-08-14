@@ -84,13 +84,22 @@ public:
 #endif
 private:
 
+#ifndef SD_CARD_MISO_PIN
 #   define SD_CARD_MISO_PIN    19
+#endif
+#ifndef SD_CARD_MOSI_PIN
 #   define SD_CARD_MOSI_PIN    23
+#endif
+#ifndef SD_CARD_CLK_PIN
 #   define SD_CARD_CLK_PIN     18
+#endif
+
 #   define SD_CARD_CLK_MHZ     SD_SCK_MHZ(50)  // 50 MHz SPI clock
 
 #ifdef ARDUINO_ARCH_ESP32
-#   define SD_CARD_CS_PIN      4
+#   ifndef SD_CARD_CS_PIN
+#       define SD_CARD_CS_PIN      4
+#   endif
 #else
 #   define SD_CARD_CS_PIN      15
 #endif
