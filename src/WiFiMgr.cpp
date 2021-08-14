@@ -194,6 +194,14 @@ void c_WiFiMgr::GetStatus (JsonObject & jsonStatus)
  // DEBUG_END;
 } // GetStatus
 
+//------------------------------------------------------------------------------
+// Broadcast network state change to relevant managers
+void c_WiFiMgr::NetworkStateChanged (bool NetworkState) {
+    InputMgr.NetworkStateChanged (NetworkState);
+    WebMgr.NetworkStateChanged (NetworkState);
+    FPPDiscovery.NetworkStateChanged (NetworkState);
+}
+
 //-----------------------------------------------------------------------------
 void c_WiFiMgr::connectEth ()
 {
@@ -215,7 +223,7 @@ void c_WiFiMgr::connectEth ()
     //       int mdio=ETH_PHY_MDIO, 
     //       eth_phy_type_t type=ETH_PHY_TYPE,
     //       eth_clock_mode_t clk_mode=ETH_CLK_MODE);
-    ETH.begin ();
+    if (!eth_connected) ETH.begin ();
 
     // DEBUG_V (String ("config->hostname: ") + config->hostname);
     if (0 != config->hostname.length ())
@@ -288,11 +296,20 @@ void c_WiFiMgr::reset ()
 
     LOG_PORT.println (F ("WiFi Reset has been requested"));
 
-    fsm_WiFi_state_Boot_imp.Init ();
-    if (IsWiFiConnected())
+    
+    if (IsConnected())
     {
-        InputMgr.NetworkStateChanged (false);
+        // Disconnect WiFi if connected
+#ifdef ARDUINO_ARCH_ESP8266
+        WiFi.disconnect ();
+#else
+        WiFi.persistent (false);
+        // DEBUG_V ("");
+        WiFi.disconnect (true);
+#endif
+        WiFiMgr.NetworkStateChanged (false);
     }
+    fsm_WiFi_state_Boot_imp.Init ();
 
     // DEBUG_END;
 } // reset
@@ -421,10 +438,10 @@ void c_WiFiMgr::onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t in
 #else
     if (WiFiMgr.IsWiFiConnected() && event == WiFiEvent_t::SYSTEM_EVENT_ETH_GOT_IP) {
 #endif
-        LOG_PORT.println (F ("Both network interfaces connected. Requesting Reboot"));
-        //@TODO I'm not sure if this is the best way to handle this, but trying
-        //to sort out the connections otherwise is somewhat involved. A reboot
-        //seems like the easiest way to go about this.
+        // LOG_PORT.println (F ("Both network interfaces connected. Requesting Reboot"));
+        // //@TODO I'm not sure if this is the best way to handle this, but trying
+        // //to sort out the connections otherwise is somewhat involved. A reboot
+        // //seems like the easiest way to go about this.
         extern bool reboot;
         reboot = true;
     }
@@ -447,11 +464,13 @@ void c_WiFiMgr::onWiFiDisconnect (const WiFiEventStationModeDisconnected & event
 #else
 void c_WiFiMgr::onWiFiDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info)
 {
+//     if (event == WiFiEvent_t::SYSTEM_EVENT_ETH_DISCONNECTED) {
+//         WiFiMgr.reset();
 #endif
-    // DEBUG_START;
-
+//     // DEBUG_START;
+//     } else {
     pCurrentFsmState->OnDisconnect ();
-
+    // }
     // DEBUG_END;
 
 } // onWiFiDisconnect
@@ -888,9 +907,7 @@ void fsm_WiFi_state_ConnectedToEth::Init ()
     LOG_PORT.println (String (F ("Ethernet Connected with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 
     WiFiMgr.SetIsEthConnected (true);
-    InputMgr.NetworkStateChanged (true);
-    WebMgr.NetworkStateChanged (true);
-    FPPDiscovery.NetworkStateChanged (true);
+    WiFiMgr.NetworkStateChanged (true);
 #endif
     // DEBUG_END;
 } // fsm_WiFi_state_ConnectedToEth::Init
@@ -943,9 +960,7 @@ void fsm_WiFi_state_ConnectedToAP::Init ()
     LOG_PORT.println (String (F ("WiFi Connected with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 
     WiFiMgr.SetIsWiFiConnected (true);
-    InputMgr.NetworkStateChanged (true);
-    WebMgr.NetworkStateChanged (true);
-    FPPDiscovery.NetworkStateChanged (true);
+    WiFiMgr.NetworkStateChanged (true);
 
     // DEBUG_END;
 } // fsm_WiFi_state_ConnectingAsAP::Init
@@ -998,7 +1013,7 @@ void fsm_WiFi_state_ConnectedToSta::Init ()
     LOG_PORT.println (String (F ("\nWiFi Connected to STA with IP: ")) + WiFiMgr.getIpAddress ().toString ());
 
     WiFiMgr.SetIsWiFiConnected (true);
-    InputMgr.NetworkStateChanged (true);
+    WiFiMgr.NetworkStateChanged (true);
 
 
     // DEBUG_END;
@@ -1030,7 +1045,7 @@ void fsm_WiFi_state_ConnectionFailed::Init ()
     if (WiFiMgr.IsWiFiConnected())
     {
         WiFiMgr.SetIsWiFiConnected (false);
-        InputMgr.NetworkStateChanged (false);
+        WiFiMgr.NetworkStateChanged (false);
     }
     else
     {

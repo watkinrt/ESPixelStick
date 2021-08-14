@@ -69,6 +69,8 @@ public:
     void      SetIsEthConnected (bool value) { ReportedIsEthConnected = value; }
     bool      IsWiFiConnected () { return ReportedIsWiFiConnected; }
     void      SetIsWiFiConnected (bool value) { ReportedIsWiFiConnected = value; }
+    bool      IsConnected () {return IsWiFiConnected() || IsEthConnected();}
+    void      NetworkStateChanged (bool NetworkState);
 
 private:
 
