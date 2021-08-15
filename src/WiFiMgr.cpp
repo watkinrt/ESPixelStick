@@ -108,8 +108,8 @@ RF_PRE_INIT() {
 /* FSM                                                                       */
 /*****************************************************************************/
 fsm_WiFi_state_Boot                    fsm_WiFi_state_Boot_imp;
-fsm_WiFi_state_ConnectingToEthUsingConfig   fsm_WiFi_state_ConnectingToEthUsingConfig_imp;
-fsm_WiFi_state_ConnectingToEthUsingDefaults fsm_WiFi_state_ConnectingToEthDefault_imp;
+fsm_WiFi_state_ConnectingToEth         fsm_WiFi_state_ConnectingToEth_imp;
+// fsm_WiFi_state_ConnectingToEthUsingDefaults fsm_WiFi_state_ConnectingToEthDefault_imp;
 fsm_WiFi_state_ConnectingUsingConfig   fsm_WiFi_state_ConnectingUsingConfig_imp;
 fsm_WiFi_state_ConnectingUsingDefaults fsm_WiFi_state_ConnectingDefault_imp;
 fsm_WiFi_state_ConnectedToEth          fsm_WiFi_state_ConnectedToEth_imp;
@@ -338,7 +338,7 @@ void c_WiFiMgr::reset ()
 void c_WiFiMgr::SetUpEthIp ()
 {
     // DEBUG_START;
-    #ifndef ARDUINO_ARCH_ESP8266
+    #ifdef ARDUINO_ARCH_ESP32
     do // once
     {
         if (true == config->UseDhcp)
@@ -495,12 +495,11 @@ void c_WiFiMgr::onEthConnect (const WiFiEvent_t event, const WiFiEventInfo_t inf
 
     // Check to see if WiFi is already connected. If so, restart manager. If
     // not, initialize connected state
-    if (WiFiMgr.IsWiFiConnected() || WiFi.isConnected()) {
+    if (WiFiMgr.IsWiFiConnected()) {
         LOG_PORT.println (F ("Both network interfaces connected. Resetting"));
         WiFiMgr.reset();
     }
     else {
-        DEBUG_V ();
         pCurrentFsmState->OnConnect ();
     }
 } // onEthConnect
@@ -597,7 +596,7 @@ void fsm_WiFi_state_Boot::Poll ()
 #ifdef ARDUINO_ARCH_ESP8266
     fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
 #else
-    fsm_WiFi_state_ConnectingToEthUsingConfig_imp.Init ();
+    fsm_WiFi_state_ConnectingToEth_imp.Init ();
 #endif
     // DEBUG_END;
 } // fsm_WiFi_state_boot
@@ -620,7 +619,7 @@ void fsm_WiFi_state_Boot::Init ()
 /*****************************************************************************/
 /*****************************************************************************/
 // Wait for events
-void fsm_WiFi_state_ConnectingToEthUsingConfig::Poll ()
+void fsm_WiFi_state_ConnectingToEth::Poll ()
 {
     // DEBUG_START;
     // DEBUG_V ("Eth config poll");
@@ -635,7 +634,7 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::Poll ()
         if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (5000))
         {
             LOG_PORT.println (F ("\nEthernet Failed to connect using Configured Credentials"));
-            fsm_WiFi_state_ConnectingToEthDefault_imp.Init ();
+            fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
         }
     }
 
@@ -644,7 +643,7 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::Poll ()
 
 /*****************************************************************************/
 // Wait for events
-void fsm_WiFi_state_ConnectingToEthUsingConfig::Init ()
+void fsm_WiFi_state_ConnectingToEth::Init ()
 {
     // DEBUG_START;
     // DEBUG_V ("Eth config init");
@@ -666,7 +665,7 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::Init ()
 
 /*****************************************************************************/
 // Wait for events
-void fsm_WiFi_state_ConnectingToEthUsingConfig::OnConnect ()
+void fsm_WiFi_state_ConnectingToEth::OnConnect ()
 {
     // DEBUG_START;
 
@@ -676,60 +675,60 @@ void fsm_WiFi_state_ConnectingToEthUsingConfig::OnConnect ()
 
 } // fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect
 
-/*****************************************************************************/
-/*****************************************************************************/
-// Wait for events
-void fsm_WiFi_state_ConnectingToEthUsingDefaults::Poll ()
-{
-    // DEBUG_START;
-    // DEBUG_V ("Eth default poll");
-    // wait for the connection to complete via the callback function
-    uint32_t CurrentTimeMS = millis ();
+// /*****************************************************************************/
+// /*****************************************************************************/
+// // Wait for events
+// void fsm_WiFi_state_ConnectingToEthUsingDefaults::Poll ()
+// {
+//     // DEBUG_START;
+//     // DEBUG_V ("Eth default poll");
+//     // wait for the connection to complete via the callback function
+//     uint32_t CurrentTimeMS = millis ();
 
-    // Check ethernet status first
-    if (! eth_connected) {
-        // @TODO Ethernet connection timeout is currently hardcoded to 1s. Add
-        // to network config.
-        if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (1000))
-        {
-            LOG_PORT.println (F ("\nEthernet Failed to connect using default Credentials"));
-            fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
-        }
-    }
+//     // Check ethernet status first
+//     if (! eth_connected) {
+//         // @TODO Ethernet connection timeout is currently hardcoded to 1s. Add
+//         // to network config.
+//         if (CurrentTimeMS - WiFiMgr.GetFsmStartTime() > (1000))
+//         {
+//             LOG_PORT.println (F ("\nEthernet Failed to connect using default Credentials"));
+//             fsm_WiFi_state_ConnectingUsingConfig_imp.Init ();
+//         }
+//     }
 
-    // DEBUG_END;
-} // fsm_WiFi_state_ConnectingToEthUsingDefaults::Poll
+//     // DEBUG_END;
+// } // fsm_WiFi_state_ConnectingToEthUsingDefaults::Poll
 
-/*****************************************************************************/
-// Wait for events
-void fsm_WiFi_state_ConnectingToEthUsingDefaults::Init ()
-{
-    // DEBUG_START;
+// /*****************************************************************************/
+// // Wait for events
+// void fsm_WiFi_state_ConnectingToEthUsingDefaults::Init ()
+// {
+//     // DEBUG_START;
 
-    WiFiMgr.SetFsmState (this);
-    WiFiMgr.AnnounceState ();
-    WiFiMgr.SetFsmStartTime (millis ());
+//     WiFiMgr.SetFsmState (this);
+//     WiFiMgr.AnnounceState ();
+//     WiFiMgr.SetFsmStartTime (millis ());
 
-    // Switch to station mode and disconnect just in case
-    // DEBUG_V ("");
+//     // Switch to station mode and disconnect just in case
+//     // DEBUG_V ("");
 
-    // First try to connect to ethernet followed by WiFi
-    WiFiMgr.connectEth ();
+//     // First try to connect to ethernet followed by WiFi
+//     WiFiMgr.connectEth ();
 
-    // DEBUG_END;
-} // fsm_WiFi_state_ConnectingToEthUsingDefaults::Init
+//     // DEBUG_END;
+// } // fsm_WiFi_state_ConnectingToEthUsingDefaults::Init
 
-/*****************************************************************************/
-// Wait for events
-void fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect ()
-{
-    // DEBUG_START;
+// /*****************************************************************************/
+// // Wait for events
+// void fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect ()
+// {
+//     // DEBUG_START;
 
-    fsm_WiFi_state_ConnectedToEth_imp.Init ();
+//     fsm_WiFi_state_ConnectedToEth_imp.Init ();
 
-    // DEBUG_END;
+//     // DEBUG_END;
 
-} // fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect
+// } // fsm_WiFi_state_ConnectingToEthUsingDefaults::OnConnect
 
 
 /*****************************************************************************/

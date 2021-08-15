@@ -108,8 +108,8 @@ private:
 
 protected:
     friend class fsm_WiFi_state_Boot;
-    friend class fsm_WiFi_state_ConnectingToEthUsingConfig;
-    friend class fsm_WiFi_state_ConnectingToEthUsingDefaults;
+    friend class fsm_WiFi_state_ConnectingToEth;
+    // friend class fsm_WiFi_state_ConnectingToEthUsingDefaults;
     friend class fsm_WiFi_state_ConnectingUsingConfig;
     friend class fsm_WiFi_state_ConnectingUsingDefaults;
     friend class fsm_WiFi_state_ConnectedToEth;
@@ -143,7 +143,7 @@ public:
 }; // fsm_WiFi_state_Boot
 
 /*****************************************************************************/
-class fsm_WiFi_state_ConnectingToEthUsingConfig : public fsm_WiFi_state
+class fsm_WiFi_state_ConnectingToEth : public fsm_WiFi_state
 {
 public:
     virtual void Poll (void);
@@ -155,16 +155,16 @@ public:
 }; // fsm_WiFi_state_ConnectingUsingConfig
 
 /*****************************************************************************/
-class fsm_WiFi_state_ConnectingToEthUsingDefaults : public fsm_WiFi_state
-{
-public:
-    virtual void Poll (void);
-    virtual void Init (void);
-    virtual void GetStateName (String& sName) { sName = F ("Connecting to Ethernet Using Default Credentials"); }
-    virtual void OnConnect (void);
-    virtual void OnDisconnect (void)          { LOG_PORT.print ("."); }
-
-}; // fsm_WiFi_state_ConnectingUsingConfig
+// class fsm_WiFi_state_ConnectingToEthUsingDefaults : public fsm_WiFi_state
+// {
+// public:
+//     virtual void Poll (void);
+//     virtual void Init (void);
+//     virtual void GetStateName (String& sName) { sName = F ("Connecting to Ethernet Using Default Credentials"); }
+//     virtual void OnConnect (void);
+//     virtual void OnDisconnect (void)          { LOG_PORT.print ("."); }
+// 
+// }; // fsm_WiFi_state_ConnectingUsingConfig
 
 /*****************************************************************************/
 class fsm_WiFi_state_ConnectingUsingConfig : public fsm_WiFi_state
