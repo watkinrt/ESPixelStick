@@ -27,6 +27,7 @@
 #else
 #   include <esp_wifi.h>
 #   include <ETH.h>
+#   include "esp_eth.h"
 #endif // def ARDUINO_ARCH_ESP8266
 
 #include "WiFiMgr.hpp"
@@ -55,6 +56,7 @@ void EthTrackingEvent(WiFiEvent_t event)
 {
   switch (event) {
     case SYSTEM_EVENT_ETH_START:
+      eth_connected = false;
       Serial.println("ETH Started");
       //set eth hostname here
     //   ETH.setHostname("esp32-ethernet");
@@ -160,8 +162,8 @@ void c_WiFiMgr::Begin (config_t* NewConfig)
     wifiDisconnectHandler = WiFi.onStationModeDisconnected ([this](const WiFiEventStationModeDisconnected& event) {this->onWiFiDisconnect (event); });
 #else
     WiFi.onEvent(EthTrackingEvent);
-    WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_GOT_IP);
-    WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiDisconnect (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_DISCONNECTED);
+    WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onEthConnect    (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_GOT_IP);
+    WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onEthDisconnect (event, info);}, WiFiEvent_t::SYSTEM_EVENT_ETH_DISCONNECTED);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiStaConn (event, info); }, WiFiEvent_t::SYSTEM_EVENT_STA_CONNECTED);
     WiFi.onEvent ([this](WiFiEvent_t event, system_event_info_t info) {this->onWiFiStaDisc (event, info); }, WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
 
@@ -206,7 +208,7 @@ void c_WiFiMgr::NetworkStateChanged (bool NetworkState) {
 void c_WiFiMgr::connectEth ()
 {
     // DEBUG_START;
-    #ifndef ARDUINO_ARCH_ESP8266
+    #ifdef ARDUINO_ARCH_ESP32
     // disconnect just in case
 // #ifdef ARDUINO_ARCH_ESP8266
 //     return;
@@ -223,7 +225,9 @@ void c_WiFiMgr::connectEth ()
     //       int mdio=ETH_PHY_MDIO, 
     //       eth_phy_type_t type=ETH_PHY_TYPE,
     //       eth_clock_mode_t clk_mode=ETH_CLK_MODE);
-    if (!eth_connected) ETH.begin ();
+    // if (!eth_connected)
+    // esp_eth_disable();
+    ETH.begin ();
 
     // DEBUG_V (String ("config->hostname: ") + config->hostname);
     if (0 != config->hostname.length ())
@@ -296,19 +300,35 @@ void c_WiFiMgr::reset ()
 
     LOG_PORT.println (F ("WiFi Reset has been requested"));
 
+    // Reset connection statuses
+    WiFiMgr.SetIsWiFiConnected(false);
+    WiFiMgr.SetIsEthConnected(false);
     
-    if (IsConnected())
-    {
-        // Disconnect WiFi if connected
+    // if (WiFiMgr.IsConnected())
+    // {
+    //     // Disconnect WiFi if connected
+    //     if (WiFiMgr.IsWiFiConnected()){
 #ifdef ARDUINO_ARCH_ESP8266
-        WiFi.disconnect ();
+            WiFi.disconnect ();
 #else
-        WiFi.persistent (false);
-        // DEBUG_V ("");
-        WiFi.disconnect (true);
+            WiFi.persistent (false);
+            // DEBUG_V ("");
+            WiFi.disconnect (true);
 #endif
+        // }
+
+        // Disconnect Ethernet if connected
+#ifdef ARDUINO_ARCH_ESP32
+        // if (WiFiMgr.IsEthConnected()){
+            //@TODO
+            if (esp_eth_disable() != ESP_OK) {
+                DEBUG_V ("Issues disconnecting ethernet");
+            }
+        // }
+#endif
+
         WiFiMgr.NetworkStateChanged (false);
-    }
+    // }
     fsm_WiFi_state_Boot_imp.Init ();
 
     // DEBUG_END;
@@ -429,21 +449,22 @@ void c_WiFiMgr::onWiFiConnect (const WiFiEventStationModeGotIP& event)
 void c_WiFiMgr::onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t info)
 {
 #endif
-    // DEBUG_START;
+    DEBUG_START;
 
     // Check to see if WiFi is already connected. If so, restart manager. If
     // not, initialize connected state
 #ifdef ARDUINO_ARCH_ESP8266
     if (false) {
 #else
-    if (WiFiMgr.IsWiFiConnected() && event == WiFiEvent_t::SYSTEM_EVENT_ETH_GOT_IP) {
+    if (WiFiMgr.IsEthConnected() || eth_connected) {
 #endif
         // LOG_PORT.println (F ("Both network interfaces connected. Requesting Reboot"));
         // //@TODO I'm not sure if this is the best way to handle this, but trying
         // //to sort out the connections otherwise is somewhat involved. A reboot
         // //seems like the easiest way to go about this.
-        extern bool reboot;
-        reboot = true;
+        WiFiMgr.reset();
+        // extern bool reboot;
+        // reboot = true;
     }
     else {
         pCurrentFsmState->OnConnect ();
@@ -451,7 +472,7 @@ void c_WiFiMgr::onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t in
 
     
 
-    // DEBUG_END;
+    DEBUG_END;
 } // onWiFiConnect
 
 
@@ -469,11 +490,47 @@ void c_WiFiMgr::onWiFiDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t
 #endif
 //     // DEBUG_START;
 //     } else {
+    WiFiMgr.SetIsWiFiConnected(false);
     pCurrentFsmState->OnDisconnect ();
     // }
     // DEBUG_END;
 
 } // onWiFiDisconnect
+
+
+#ifdef ARDUINO_ARCH_ESP32
+
+void c_WiFiMgr::onEthConnect (const WiFiEvent_t event, const WiFiEventInfo_t info)
+{
+
+    if (WiFiMgr.IsWiFiConnected()) {
+        // LOG_PORT.println (F ("Both network interfaces connected. Requesting Reboot"));
+        // //@TODO I'm not sure if this is the best way to handle this, but trying
+        // //to sort out the connections otherwise is somewhat involved. A reboot
+        // //seems like the easiest way to go about this.
+        // DEBUG_V("");
+        WiFiMgr.reset();
+        // extern bool reboot;
+        // reboot = true;
+    }
+    else {
+        DEBUG_V ();
+        pCurrentFsmState->OnConnect ();
+    }
+
+    
+
+    // DEBUG_END;
+} // onWiFiConnect
+
+void c_WiFiMgr::onEthDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info)
+{
+    WiFiMgr.SetIsEthConnected(false);
+    pCurrentFsmState->OnDisconnect ();
+
+} // onEthDisconnect
+
+#endif
 
 //-----------------------------------------------------------------------------
 int c_WiFiMgr::ValidateConfig (config_t* NewConfig)
@@ -919,7 +976,8 @@ void fsm_WiFi_state_ConnectedToEth::OnDisconnect ()
     // DEBUG_START;
 
     LOG_PORT.println (F ("Ethernet lost the connection"));
-    fsm_WiFi_state_ConnectionFailed_imp.Init ();
+    fsm_WiFi_state_ConnectingUsingConfig_imp.Init();
+    // fsm_WiFi_state_ConnectionFailed_imp.Init ();
 
     // DEBUG_END;
 

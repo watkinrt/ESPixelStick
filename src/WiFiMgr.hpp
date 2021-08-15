@@ -99,6 +99,9 @@ private:
     void onWiFiConnect    (const WiFiEvent_t event, const WiFiEventInfo_t info);
     void onWiFiDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
 
+    void onEthConnect    (const WiFiEvent_t event, const WiFiEventInfo_t info);
+    void onEthDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info);
+
     void onWiFiStaConn    (const WiFiEvent_t event, const WiFiEventInfo_t info);
     void onWiFiStaDisc    (const WiFiEvent_t event, const WiFiEventInfo_t info);
 #endif
