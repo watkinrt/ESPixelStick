@@ -449,22 +449,17 @@ void c_WiFiMgr::onWiFiConnect (const WiFiEventStationModeGotIP& event)
 void c_WiFiMgr::onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t info)
 {
 #endif
-    DEBUG_START;
+    // DEBUG_START;
 
-    // Check to see if WiFi is already connected. If so, restart manager. If
+    // Check to see if Ethernet is already connected. If so, restart manager. If
     // not, initialize connected state
 #ifdef ARDUINO_ARCH_ESP8266
     if (false) {
 #else
     if (WiFiMgr.IsEthConnected() || eth_connected) {
 #endif
-        // LOG_PORT.println (F ("Both network interfaces connected. Requesting Reboot"));
-        // //@TODO I'm not sure if this is the best way to handle this, but trying
-        // //to sort out the connections otherwise is somewhat involved. A reboot
-        // //seems like the easiest way to go about this.
+        LOG_PORT.println (F ("Both network interfaces connected. Resetting"));
         WiFiMgr.reset();
-        // extern bool reboot;
-        // reboot = true;
     }
     else {
         pCurrentFsmState->OnConnect ();
@@ -472,7 +467,7 @@ void c_WiFiMgr::onWiFiConnect (const WiFiEvent_t event, const WiFiEventInfo_t in
 
     
 
-    DEBUG_END;
+    // DEBUG_END;
 } // onWiFiConnect
 
 
@@ -485,15 +480,10 @@ void c_WiFiMgr::onWiFiDisconnect (const WiFiEventStationModeDisconnected & event
 #else
 void c_WiFiMgr::onWiFiDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info)
 {
-//     if (event == WiFiEvent_t::SYSTEM_EVENT_ETH_DISCONNECTED) {
-//         WiFiMgr.reset();
 #endif
-//     // DEBUG_START;
-//     } else {
+
     WiFiMgr.SetIsWiFiConnected(false);
     pCurrentFsmState->OnDisconnect ();
-    // }
-    // DEBUG_END;
 
 } // onWiFiDisconnect
 
@@ -503,25 +493,17 @@ void c_WiFiMgr::onWiFiDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t
 void c_WiFiMgr::onEthConnect (const WiFiEvent_t event, const WiFiEventInfo_t info)
 {
 
-    if (WiFiMgr.IsWiFiConnected()) {
-        // LOG_PORT.println (F ("Both network interfaces connected. Requesting Reboot"));
-        // //@TODO I'm not sure if this is the best way to handle this, but trying
-        // //to sort out the connections otherwise is somewhat involved. A reboot
-        // //seems like the easiest way to go about this.
-        // DEBUG_V("");
+    // Check to see if WiFi is already connected. If so, restart manager. If
+    // not, initialize connected state
+    if (WiFiMgr.IsWiFiConnected() || WiFi.isConnected()) {
+        LOG_PORT.println (F ("Both network interfaces connected. Resetting"));
         WiFiMgr.reset();
-        // extern bool reboot;
-        // reboot = true;
     }
     else {
         DEBUG_V ();
         pCurrentFsmState->OnConnect ();
     }
-
-    
-
-    // DEBUG_END;
-} // onWiFiConnect
+} // onEthConnect
 
 void c_WiFiMgr::onEthDisconnect (const WiFiEvent_t event, const WiFiEventInfo_t info)
 {
